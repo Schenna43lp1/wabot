@@ -89,3 +89,22 @@ jobs:
 
       - name: Paketsignaturen prüfen
         run: npm audit signatures
+
+  discord:
+    name: Discord benachrichtigen
+    needs: [test, security]
+    # Also after a failure, but not for runs replaced by a newer push.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Ergebnis senden
+        uses: sarisia/actions-status-discord@eb045afee445dc055c18d3d90bd0f244fd062708 # v1.16.0
+        with:
+          # Repository secret. Never put the webhook URL into this file: the repository is public.
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+          title: CI
+          # Without the secret (e.g. pull requests from forks) the step does nothing.
+          ack_no_webhook: true
