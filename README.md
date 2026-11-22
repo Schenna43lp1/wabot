@@ -2,6 +2,8 @@
 
 Schick dem Bot einen Produktlink per WhatsApp. Er prüft den Preis regelmäßig und schreibt dir, wenn er fällt, dein Zielpreis erreicht ist oder das Produkt wieder verfügbar ist.
 
+Dazu kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe auswerten und als Tabelle exportieren. Die Preisdaten sichert er täglich.
+
 ## Start
 
 Voraussetzung: [Node.js](https://nodejs.org) 24 oder neuer.
@@ -48,7 +50,23 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 | `ziel 3 89,90` | Zielpreis setzen |
 | `ziel 3 -10%` | Zielpreis relativ zum jetzigen Preis |
 | `ziel 3 aus` | Zielpreis entfernen |
-| `verlauf 3` | letzte Änderungen, Tief und Hoch |
+| `verlauf 3` | Änderungen, Tief und Hoch, Trend und 30-Tage-Schnitt |
+| `name 3 Kopfhörer` | eigener Name |
+| `name 3 auto` | wieder der Name aus dem Shop |
+| `pause 3` | nicht mehr automatisch prüfen |
+| `weiter 3` | fortsetzen |
+| `pause alle` | alles pausieren, z. B. für den Urlaub |
+| `weiter alle` | alles fortsetzen, auch einzeln Pausiertes |
+| `schwelle 3 5%` | erst ab 5 % Senkung melden |
+| `schwelle 3 immer` | jede Senkung melden |
+| `schwelle 3 auto` | wieder die Standardschwelle |
+| `ruhe 22-7` | in dieser Zeit keine Meldungen |
+| `ruhe aus` | Ruhezeit beenden |
+| `übersicht` | Änderungen der letzten 7 Tage |
+| `übersicht täglich 8` | jeden Tag die Änderungen der letzten 24 Stunden |
+| `übersicht sonntag 18:30` | jede Woche die Änderungen der letzten 7 Tage |
+| `übersicht aus` | nicht mehr schicken |
+| `export` | Produkte und Preisverlauf als CSV-Datei für Excel |
 | `löschen 3` | nicht mehr beobachten |
 | `rückgängig` | letztes Löschen zurücknehmen, samt Verlauf |
 | `selektor 3 .price` | Preis per CSS-Selektor lesen |
@@ -57,15 +75,20 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 
 Der Bot versteht auch `Lösche 3.`, `3 löschen`, `löschen nr. 3`, `liste bitte` oder einen Link statt der Nummer (`löschen https://…`). Bei Tippfehlern und Produktnamen schlägt er den passenden Befehl vor, führt ihn aber nicht von selbst aus.
 
-Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, damit er deine Notizen nicht kommentiert: keine Tippfehler-Vorschläge, keine Begrüßung, eine Zahl allein zählt nicht.
+Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, damit er deine Notizen nicht kommentiert: keine Tippfehler-Vorschläge, keine Begrüßung, eine Zahl allein zählt nicht, und Wörter wie `pause`, `name` oder `weiter` gelten nur mit gültiger Nummer oder `alle`.
 
 ## Wann kommt eine Nachricht?
 
-- **Ohne Zielpreis:** bei einer Senkung ab 1 %. Mehrere kleine Senkungen zählen zusammen.
-- **Mit Zielpreis:** erst beim Erreichen, danach bei weiteren Senkungen.
+- **Ohne Zielpreis:** bei einer Senkung ab 1 % oder ab deiner `schwelle`. Mehrere kleine Senkungen zählen zusammen.
+- **Mit Zielpreis:** erst beim Erreichen, danach bei weiteren Senkungen ab der Schwelle.
 - **Wieder verfügbar:** immer.
 - **Preissprünge** auf unter die Hälfte oder über das Doppelte werden nach 10 Minuten noch einmal geprüft, bevor sie zählen.
 - **Dauerhafte Fehler:** einmal nach fünf Fehlversuchen in Folge.
+- **Pausiert:** keine automatischen Prüfungen. Eine Senkung während der Pause wird beim Fortsetzen erkannt, wenn der Preis dann noch niedriger ist.
+- **Ruhezeit:** Meldungen kommen gesammelt danach, mit dem Zeitpunkt der Prüfung. Antworten auf deine Nachrichten kommen sofort.
+- **Übersicht:** War der PC zur geplanten Zeit aus, kommt sie einmal beim nächsten Start.
+
+Alle Uhrzeiten richten sich nach der Uhr des PCs.
 
 ## Einstellungen (`.env`)
 
@@ -110,7 +133,18 @@ Grenzen:
 - Der Bot nutzt [Baileys](https://github.com/WhiskeySockets/Baileys), eine **inoffizielle** WhatsApp-Anbindung (Version 7.0.0-rc14, ein Release Candidate). **WhatsApp kann die Nummer sperren.** Nur privat und in kleinem Umfang verwenden.
 - `data/auth` (auch `data/auth-alt-…`) gewährt Zugriff auf das WhatsApp-Konto. **Niemals weitergeben oder hochladen.** Der Ordner `data` und `.env` stehen in `.gitignore`.
 - Links auf Adressen im Heimnetz werden abgelehnt.
-- Alle Daten liegen lokal in `data/tracker.db`. Für ein Backup den Bot beenden und `data` kopieren.
+- Alle Daten liegen lokal in `data/tracker.db`. Beim Export geht die Tabelle über WhatsApp an die Person, die sie angefordert hat.
+
+## Backup
+
+Der Bot legt einmal am Tag eine Kopie der Preisdaten in `data/backup` an und behält die letzten 7. Die WhatsApp-Verknüpfung ist nicht enthalten. Gegen einen Plattendefekt hilft nur eine Kopie auf einem anderen Laufwerk.
+
+Wiederherstellen:
+
+1. Bot beenden.
+2. In `data` die Dateien `tracker.db`, `tracker.db-wal` und `tracker.db-shm` umbenennen, soweit vorhanden.
+3. Die gewünschte Datei aus `data/backup` nach `data` kopieren und `tracker.db` nennen.
+4. Bot starten.
 
 ## Probleme
 
@@ -143,3 +177,9 @@ npm test
 | `money.js` | Preisformate |
 | `fetch-page.js` | sicherer Seitenabruf |
 | `db.js` | SQLite |
+| `options.js` | Pause, Name, Schwelle, Ruhezeit |
+| `schedule.js` | Uhrzeiten und Ruhezeit |
+| `report.js` | Übersicht |
+| `stats.js` | Auswertung des Verlaufs |
+| `export.js` | CSV-Export |
+| `backup.js` | tägliche Sicherung |
