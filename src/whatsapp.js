@@ -166,11 +166,15 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
   async function answer({ user, chat }, reply) {
     try {
       if (reply.file) await sendFile(chat, reply);
+      else if (reply.image) await sendImage(chat, reply);
       else await send(chat, reply);
     } catch (error) {
-      if (!reply.file) return void db.queue(user, reply, { urgent: true, at: now() });
-      log(`Export nicht gesendet: ${error.message}`);
-      db.queue(user, '⚠️ Die Tabelle konnte ich nicht senden. Schick bitte noch einmal `export`.', { urgent: true, at: now() });
+      if (typeof reply === 'string') return void db.queue(user, reply, { urgent: true, at: now() });
+      log(`${reply.file ? 'Export' : 'Bild'} nicht gesendet: ${error.message}`);
+      const notice = reply.file
+        ? '⚠️ Die Tabelle konnte ich nicht senden. Schick bitte noch einmal `export`.'
+        : `${reply.text}\n\n⚠️ Das Diagramm konnte ich nicht senden.`;
+      db.queue(user, notice, { urgent: true, at: now() });
     }
   }
 
@@ -191,6 +195,20 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
     if (!online) throw new Error('offline');
     const sent = await sock.sendMessage(jid, {
       document: file.data, fileName: file.name, mimetype: file.mimetype, caption: MARK + text,
+    });
+    remember(sent);
+  }
+
+  async function sendImage(jid, { text, image }) {
+    if (!online) throw new Error('offline');
+    const sent = await sock.sendMessage(jid, {
+      image: image.data,
+      mimetype: image.mimetype,
+      caption: MARK + text,
+      width: image.width,
+      height: image.height,
+      // Baileys needs sharp or jimp for a preview. Without one the phone loads the full image.
+      jpegThumbnail: '',
     });
     remember(sent);
   }

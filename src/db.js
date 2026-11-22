@@ -53,6 +53,16 @@ export function openDatabase(file) {
     );
     CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT);
     CREATE TABLE IF NOT EXISTS trash (user TEXT PRIMARY KEY, body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS purchases (
+      id       INTEGER PRIMARY KEY,
+      user     TEXT NOT NULL,
+      title    TEXT NOT NULL,
+      url      TEXT NOT NULL,
+      paid     INTEGER NOT NULL,
+      start    INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      at       INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
   `);
   addMissingColumns(db);
@@ -103,24 +113,36 @@ export function openDatabase(file) {
     clearHistory: (id) => run('DELETE FROM history WHERE product_id = ?', id),
 
     // Keeps the last deleted product of each user, for "rückgängig".
-    moveToTrash(product) {
+    moveToTrash(product, purchase) {
       const history = store.allHistory(product.id);
       store.transaction(() => {
-        run('INSERT OR REPLACE INTO trash VALUES (?, ?)', product.user, JSON.stringify({ product, history }));
+        run('INSERT OR REPLACE INTO trash VALUES (?, ?)', product.user, JSON.stringify({ product, history, purchase }));
         store.remove(product.id);
       });
     },
+    /** Records the purchase and removes the product, undoable together. */
+    buy(product, { title, paid, start, currency, at }) {
+      const history = store.allHistory(product.id);
+      store.transaction(() => {
+        const purchase = Number(run('INSERT INTO purchases (user, title, url, paid, start, currency, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          product.user, title, product.url, paid, start, currency, at).lastInsertRowid);
+        run('INSERT OR REPLACE INTO trash VALUES (?, ?)', product.user, JSON.stringify({ product, history, purchase }));
+        store.remove(product.id);
+      });
+    },
+    purchases: (user) => all('SELECT * FROM purchases WHERE user = ? ORDER BY at DESC, id DESC', user),
     trashed(user) {
       const row = get('SELECT body FROM trash WHERE user = ?', user);
       return row ? JSON.parse(row.body) : null;
     },
-    restore(user, { product, history }) {
+    restore(user, { product, history, purchase }) {
       const columns = Object.keys(product);
       store.transaction(() => {
         // Ids are never reused (AUTOINCREMENT), so the old number is still free.
         run(`INSERT INTO products (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`, ...Object.values(product));
         for (const row of history) store.record(product.id, row.at, row.price, row.currency);
         run('DELETE FROM trash WHERE user = ?', user);
+        if (purchase) run('DELETE FROM purchases WHERE id = ? AND user = ?', purchase, user);
       });
     },
 

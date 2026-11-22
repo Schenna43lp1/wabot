@@ -2,7 +2,7 @@
 
 Schick dem Bot einen Produktlink per WhatsApp. Er prüft den Preis regelmäßig und schreibt dir, wenn er fällt, dein Zielpreis erreicht ist oder das Produkt wieder verfügbar ist.
 
-Dazu kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe auswerten und als Tabelle exportieren. Die Preisdaten sichert er täglich.
+Dazu kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe als Diagramm schicken oder als Tabelle exportieren und mitrechnen, was du beim Kauf gespart hast. Die Preisdaten sichert er täglich.
 
 ## Start
 
@@ -51,6 +51,7 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 | `ziel 3 -10%` | Zielpreis relativ zum jetzigen Preis |
 | `ziel 3 aus` | Zielpreis entfernen |
 | `verlauf 3` | Änderungen, Tief und Hoch, Trend und 30-Tage-Schnitt |
+| `diagramm 3` | Preisverlauf als Bild, mit Zielpreis und Tiefpunkt |
 | `name 3 Kopfhörer` | eigener Name |
 | `name 3 auto` | wieder der Name aus dem Shop |
 | `pause 3` | nicht mehr automatisch prüfen |
@@ -68,7 +69,10 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 | `übersicht aus` | nicht mehr schicken |
 | `export` | Produkte und Preisverlauf als CSV-Datei für Excel |
 | `löschen 3` | nicht mehr beobachten |
-| `rückgängig` | letztes Löschen zurücknehmen, samt Verlauf |
+| `rückgängig` | letztes Löschen oder `gekauft` zurücknehmen, samt Verlauf |
+| `gekauft 3` | gekauft zum jetzigen Preis, Beobachtung endet |
+| `gekauft 3 79,90` | gekauft zu diesem Preis |
+| `ersparnis` | Käufe und Ersparnis gegenüber dem Preis zu Beginn der Beobachtung |
 | `selektor 3 .price` | Preis per CSS-Selektor lesen |
 | `selektor 3 auto` | wieder automatisch erkennen |
 | `hilfe` | Übersicht |
@@ -183,3 +187,5 @@ npm test
 | `stats.js` | Auswertung des Verlaufs |
 | `export.js` | CSV-Export |
 | `backup.js` | tägliche Sicherung |
+| `purchases.js` | Käufe und Ersparnis |
+| `chart.js`, `png.js` | Preisdiagramm als PNG, ohne Bildbibliothek |

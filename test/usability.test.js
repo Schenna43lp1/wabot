@@ -158,7 +158,7 @@ test('target alert says what to do', async () => {
   await t.handle(U, 'ziel 1 95');
   await t.read(1, { cents: 9000 });
   assert.match(t.alerts()[0], /Tiefster Preis/);
-  assert.match(t.alerts()[0], /löschen 1/);
+  assert.match(t.alerts()[0], /gekauft 1/);
 });
 
 test('typos are suggested, never executed', async () => {

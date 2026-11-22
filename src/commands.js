@@ -1,11 +1,13 @@
 import { UserError } from './errors.js';
 import { validateUrl } from './fetch-page.js';
+import { priceChart, HEIGHT, WIDTH } from './chart.js';
 import { exportCsv } from './export.js';
 import { helpText } from './help.js';
 import { actionOf, parseInput, parseTarget, suggest } from './input.js';
 import { advice, details, listEntry, priceText, productName, targetText } from './messages.js';
 import { formatMoney } from './money.js';
 import { createOptions } from './options.js';
+import { createPurchases } from './purchases.js';
 import { currentSeries, periodStats, sparkline } from './stats.js';
 
 const TRACKING_PARAMS = /^(utm_\w+|gclid|gbraid|wbraid|fbclid|msclkid|igshid|mc_cid|mc_eid)$/i;
@@ -22,10 +24,12 @@ const USAGE = {
   resume: (id) => `weiter ${id}`,
   rename: (id) => `name ${id} Kopfhörer`,
   threshold: (id) => `schwelle ${id} 5%`,
+  purchase: (id) => `gekauft ${id}`,
+  chart: (id) => `diagramm ${id}`,
 };
-const TAKES_VALUE = new Set(['target', 'selector', 'rename', 'threshold']);
+const TAKES_VALUE = new Set(['target', 'selector', 'rename', 'threshold', 'purchase']);
 // Everyday words: in the self-chat they need a valid number to count as a command.
-const EVERYDAY_WORDS = new Set(['pause', 'resume', 'rename', 'threshold']);
+const EVERYDAY_WORDS = new Set(['pause', 'resume', 'rename', 'threshold', 'purchase', 'chart']);
 
 const WELCOME = `👋 *Hallo, ich bin dein Preistracker.*
 
@@ -49,6 +53,7 @@ function normalize(link) {
 
 export function createCommands({ db, tracker, config, now = Date.now }) {
   const options = createOptions({ db, config, empty: EMPTY, now });
+  const purchases = createPurchases({ db, config, now });
   function yourProducts(user) {
     const products = db.products(user);
     if (!products.length) return EMPTY;
@@ -258,6 +263,29 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
     return `${head.join('\n')}\n\n${lines.join('\n')}`;
   }
 
+  function chart(product) {
+    const { id, currency } = product;
+    const series = currentSeries(db.allHistory(id), currency);
+    const name = `*${id}. ${productName(product)}*`;
+    if (!series.length) return `Für ${name} gibt es noch keinen Preis.`;
+    if (series.length === 1) {
+      return `${name}\nDer Preis ist seit Beginn gleich: ${priceText(product)}. Ein Diagramm gibt es ab der ersten Änderung.`;
+    }
+    const money = (cents) => formatMoney(cents, currency);
+    const prices = series.map((row) => row.price);
+    const from = new Date(series[0].at).toLocaleDateString('de-DE', { dateStyle: 'short' });
+    const caption = [
+      `📈 ${name}`,
+      `Jetzt ${priceText(product)} · Tief ${money(Math.min(...prices))} · Hoch ${money(Math.max(...prices))}`,
+      product.target != null ? `🎯 Ziel ${money(product.target)} (grün gestrichelt)` : '',
+      `_Seit ${from}, roter Punkt = Tiefstpreis_`,
+    ].filter(Boolean).join('\n');
+    return {
+      text: caption,
+      image: { data: priceChart(series, { now: now(), target: product.target }), mimetype: 'image/png', width: WIDTH, height: HEIGHT },
+    };
+  }
+
   function exportData(user) {
     if (!db.products(user).length) return EMPTY;
     return {
@@ -278,7 +306,8 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
     if (same) return `Dieses Produkt beobachtest du schon wieder als Nr. ${same.id}.`;
     if (db.products(user).length >= config.maxProducts) return 'Deine Liste ist voll, ich kann es nicht zurückholen.';
     db.restore(user, deleted);
-    return `↩️ Wieder da, mit Verlauf:\n\n${details(db.product(deleted.product.id), config.currency)}`;
+    const bought = deleted.purchase ? ' Den Kauf habe ich aus der Ersparnis entfernt.' : '';
+    return `↩️ Wieder da, mit Verlauf.${bought}\n\n${details(db.product(deleted.product.id), config.currency)}`;
   }
 
   function unknown(user, text) {
@@ -306,7 +335,7 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
   }
 
   /**
-   * Returns the reply (text, or { text, file }), or null for ordinary notes in the self-chat.
+   * Returns the reply (text, { text, file } or { text, image }), or null for ordinary notes in the self-chat.
    * quiet = self-chat: only answer what is clearly meant for the bot.
    */
   return async function handle(user, text, { quiet = false } = {}) {
@@ -323,6 +352,7 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
         case 'list': return list(user);
         case 'undo': return undo(user);
         case 'export': return exportData(user);
+        case 'savings': return purchases.savings(user);
         case 'quietHours': return options.setQuietHours(user, value, quiet);
         case 'report': return options.report(user, value, quiet);
         case 'number': return quiet ? null : details(owned(user, ref), config.currency);
@@ -351,6 +381,8 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
         case 'resume': return options.setPaused(product, false);
         case 'rename': return options.rename(product, value, quiet);
         case 'threshold': return options.setThreshold(product, value, quiet);
+        case 'purchase': return purchases.purchase(product, value, quiet);
+        case 'chart': return chart(product);
       }
       return quiet ? null : unknown(user, text);
     } catch (error) {

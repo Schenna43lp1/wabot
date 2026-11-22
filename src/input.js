@@ -20,15 +20,18 @@ const WORDS = {
   quietHours: ['ruhe', 'ruhezeit'],
   report: ['übersicht', 'uebersicht', 'zusammenfassung'],
   export: ['export', 'exportieren', 'csv'],
+  purchase: ['gekauft', 'bestellt'],
+  savings: ['ersparnis', 'gespart', 'bilanz'],
+  chart: ['diagramm', 'grafik', 'chart'],
 };
 const ACTIONS = new Map(Object.entries(WORDS).flatMap(([action, words]) => words.map((word) => [word, action])));
-const NEEDS_PRODUCT = new Set(['show', 'check', 'target', 'history', 'remove', 'selector', 'pause', 'resume', 'rename', 'threshold']);
+const NEEDS_PRODUCT = new Set(['show', 'check', 'target', 'history', 'remove', 'selector', 'pause', 'resume', 'rename', 'threshold', 'purchase', 'chart']);
 const TAKES_ALL = new Set(['pause', 'resume']);
 const TAKES_SETTING = new Set(['quietHours', 'report']);
 const NEEDS_VALUE = new Set(['selector', 'rename', 'threshold']);
 
 // Only these are suggested for typos.
-const SUGGESTED = ['hilfe', 'liste', 'rückgängig', 'zeige', 'prüfen', 'ziel', 'verlauf', 'löschen', 'selektor', 'pause', 'schwelle', 'übersicht', 'export'];
+const SUGGESTED = ['hilfe', 'liste', 'rückgängig', 'zeige', 'prüfen', 'ziel', 'verlauf', 'löschen', 'selektor', 'pause', 'schwelle', 'übersicht', 'export', 'gekauft', 'ersparnis', 'diagramm'];
 
 const LINK = /https?:\/\/[^\s<>]+/gi;
 // "3", "#3", "3.", "3:", "nr. 3", "nummer 3"

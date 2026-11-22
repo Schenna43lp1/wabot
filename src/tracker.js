@@ -146,7 +146,7 @@ export function createTracker({ db, config, getProduct, notify = () => {}, now =
       const low = db.stats(product.id, currency)?.low;
       if (changed && product.price != null && price < product.price && price === low) lines.push('⭐ Tiefster Preis seit Beobachtung');
       lines.push(product.url);
-      if (reached && !product.target_hit) lines.push('', `Gekauft? Dann \`löschen ${product.id}\``);
+      if (reached && !product.target_hit) lines.push('', `Gekauft? Dann \`gekauft ${product.id}\``);
       db.queue(product.user, lines.join('\n'), { at });
     }
     return { product: db.product(product.id) };

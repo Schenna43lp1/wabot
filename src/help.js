@@ -25,9 +25,13 @@ Schick mir einen Produktlink. Ich prüfe den Preis ${interval(intervalMs)} und m
 \`zeige 3\` Details und Link
 \`prüfen 3\` Preis jetzt abrufen
 \`verlauf 3\` Preise, Trend und Tief
+\`diagramm 3\` Preisverlauf als Bild
 \`name 3 Kopfhörer\` umbenennen
 \`löschen 3\` nicht mehr beobachten
 \`rückgängig\` Löschen zurücknehmen
+\`gekauft 3\` gekauft, Beobachtung beenden
+\`gekauft 3 79,90\` mit bezahltem Preis
+\`ersparnis\` was du bisher gespart hast
 _3 ist die Nummer aus der Liste._
 
 🎯 *Zielpreis*
