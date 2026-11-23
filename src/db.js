@@ -55,7 +55,9 @@ export function openDatabase(file) {
       briefing_next   INTEGER,
       place           TEXT,
       lat             REAL,
-      lon             REAL
+      lon             REAL,
+      pending         TEXT,
+      calendar_alert  INTEGER
     );
     CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT);
     CREATE TABLE IF NOT EXISTS trash (user TEXT PRIMARY KEY, body TEXT NOT NULL);
@@ -89,6 +91,42 @@ export function openDatabase(file) {
       text TEXT NOT NULL,
       at   INTEGER NOT NULL
     );
+    -- url is a secret link to the user's calendar, it never leaves this PC except to the calendar provider.
+    CREATE TABLE IF NOT EXISTS calendars (
+      id    INTEGER PRIMARY KEY,
+      user  TEXT NOT NULL,
+      nr    INTEGER NOT NULL,
+      url   TEXT NOT NULL,
+      name  TEXT NOT NULL,
+      error TEXT,
+      UNIQUE (user, url)
+    );
+    -- Which events were already announced before they start.
+    CREATE TABLE IF NOT EXISTS calendar_alerts (user TEXT NOT NULL, key TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, key));
+    CREATE TABLE IF NOT EXISTS expenses (
+      id       INTEGER PRIMARY KEY,
+      user     TEXT NOT NULL,
+      nr       INTEGER NOT NULL,
+      cents    INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      category TEXT NOT NULL,
+      note     TEXT,
+      at       INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS expenses_user ON expenses(user, at);
+    -- category '' is the budget for the whole month
+    CREATE TABLE IF NOT EXISTS budgets (user TEXT NOT NULL, category TEXT NOT NULL, cents INTEGER NOT NULL, PRIMARY KEY (user, category));
+    CREATE TABLE IF NOT EXISTS birthdays (
+      id    INTEGER PRIMARY KEY,
+      user  TEXT NOT NULL,
+      nr    INTEGER NOT NULL,
+      name  TEXT NOT NULL,
+      day   INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      year  INTEGER
+    );
+    -- Messages that must go out only once, e.g. "birthday:3:2026:day"
+    CREATE TABLE IF NOT EXISTS once (user TEXT NOT NULL, key TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, key));
     CREATE TABLE IF NOT EXISTS notes (
       id   INTEGER PRIMARY KEY,
       user TEXT NOT NULL,
@@ -226,6 +264,69 @@ export function openDatabase(file) {
       });
     },
 
+    calendars: (user) => all('SELECT * FROM calendars WHERE user = ? ORDER BY nr', user),
+    calendarUsers: () => all('SELECT DISTINCT user FROM calendars').map((row) => row.user),
+    addCalendar(user, url, name) {
+      const nr = (get('SELECT MAX(nr) AS nr FROM calendars WHERE user = ?', user).nr ?? 0) + 1;
+      run('INSERT INTO calendars (user, nr, url, name) VALUES (?, ?, ?, ?)', user, nr, url, name);
+      return get('SELECT * FROM calendars WHERE user = ? AND nr = ?', user, nr);
+    },
+    calendarByUrl: (user, url) => get('SELECT * FROM calendars WHERE user = ? AND url = ?', user, url),
+    calendarError: (id, error) => run('UPDATE calendars SET error = ? WHERE id = ?', error, id),
+    removeCalendar: (id) => run('DELETE FROM calendars WHERE id = ?', id),
+    /** Returns false if this event was announced before. */
+    claimAlert: (user, key, at) => Number(run('INSERT OR IGNORE INTO calendar_alerts VALUES (?, ?, ?)', user, key, at).changes) === 1,
+    pruneAlerts: (before) => run('DELETE FROM calendar_alerts WHERE at < ?', before),
+    claimOnce: (user, key, at) => Number(run('INSERT OR IGNORE INTO once VALUES (?, ?, ?)', user, key, at).changes) === 1,
+    pruneOnce: (before) => run('DELETE FROM once WHERE at < ?', before),
+
+    expenses: (user, from, to) => all('SELECT * FROM expenses WHERE user = ? AND at >= ? AND at < ? ORDER BY at DESC, id DESC', user, from, to),
+    expense: (user, nr) => get('SELECT * FROM expenses WHERE user = ? AND nr = ?', user, nr),
+    addExpense(user, { cents, currency, category, note, at }) {
+      const nr = (get('SELECT MAX(nr) AS nr FROM expenses WHERE user = ?', user).nr ?? 0) + 1;
+      run('INSERT INTO expenses (user, nr, cents, currency, category, note, at) VALUES (?, ?, ?, ?, ?, ?, ?)', user, nr, cents, currency, category, note || null, at);
+      return store.expense(user, nr);
+    },
+    removeExpense: (id) => run('DELETE FROM expenses WHERE id = ?', id),
+    restoreExpense(row) {
+      const nr = store.expense(row.user, row.nr) ? (get('SELECT MAX(nr) AS nr FROM expenses WHERE user = ?', row.user).nr ?? 0) + 1 : row.nr;
+      run('INSERT INTO expenses (user, nr, cents, currency, category, note, at) VALUES (?, ?, ?, ?, ?, ?, ?)', row.user, nr, row.cents, row.currency, row.category, row.note, row.at);
+      return store.expense(row.user, nr);
+    },
+    expenseTotal: (user, from, to, currency, category = null) => get(
+      `SELECT COALESCE(SUM(cents), 0) AS total FROM expenses WHERE user = ? AND at >= ? AND at < ? AND currency = ?${category ? ' AND category = ?' : ''}`,
+      ...[user, from, to, currency, ...(category ? [category] : [])],
+    ).total,
+    expenseCategories: (user) => all('SELECT DISTINCT category FROM expenses WHERE user = ?', user).map((row) => row.category),
+    expenseUsers: (from, to) => all('SELECT DISTINCT user FROM expenses WHERE at >= ? AND at < ?', from, to).map((row) => row.user),
+    budgets: (user) => all('SELECT * FROM budgets WHERE user = ? ORDER BY category', user),
+    setBudget(user, category, cents) {
+      if (cents == null) run('DELETE FROM budgets WHERE user = ? AND category = ?', user, category);
+      else run('INSERT OR REPLACE INTO budgets VALUES (?, ?, ?)', user, category, cents);
+    },
+
+    birthdays: (user) => all('SELECT * FROM birthdays WHERE user = ? ORDER BY nr', user),
+    allBirthdays: () => all('SELECT * FROM birthdays'),
+    birthday: (user, nr) => get('SELECT * FROM birthdays WHERE user = ? AND nr = ?', user, nr),
+    addBirthday(user, { name, day, month, year }) {
+      const nr = (get('SELECT MAX(nr) AS nr FROM birthdays WHERE user = ?', user).nr ?? 0) + 1;
+      run('INSERT INTO birthdays (user, nr, name, day, month, year) VALUES (?, ?, ?, ?, ?, ?)', user, nr, name, day, month, year);
+      return store.birthday(user, nr);
+    },
+    updateBirthday(id, { day, month, year }) {
+      run('UPDATE birthdays SET day = ?, month = ?, year = ? WHERE id = ?', day, month, year, id);
+      return get('SELECT * FROM birthdays WHERE id = ?', id);
+    },
+    removeBirthday: (id) => run('DELETE FROM birthdays WHERE id = ?', id),
+    restoreBirthday(row) {
+      const nr = store.birthday(row.user, row.nr) ? (get('SELECT MAX(nr) AS nr FROM birthdays WHERE user = ?', row.user).nr ?? 0) + 1 : row.nr;
+      return store.addBirthdayAt(row, nr);
+    },
+    addBirthdayAt(row, nr) {
+      run('INSERT INTO birthdays (user, nr, name, day, month, year) VALUES (?, ?, ?, ?, ?, ?)', row.user, nr, row.name, row.day, row.month, row.year);
+      return store.birthday(row.user, nr);
+    },
+
     notes: (user) => all('SELECT * FROM notes WHERE user = ? ORDER BY nr DESC', user),
     note: (user, nr) => get('SELECT * FROM notes WHERE user = ? AND nr = ?', user, nr),
     addNote(user, text, at) {
@@ -264,7 +365,7 @@ function addMissingColumns(db) {
   const wanted = {
     products: { name: 'TEXT', paused: 'INTEGER NOT NULL DEFAULT 0', min_drop: 'REAL' },
     outbox: { at: 'INTEGER NOT NULL DEFAULT 0', urgent: 'INTEGER NOT NULL DEFAULT 0' },
-    settings: { briefing_day: 'INTEGER', briefing_minute: 'INTEGER', briefing_next: 'INTEGER', place: 'TEXT', lat: 'REAL', lon: 'REAL' },
+    settings: { briefing_day: 'INTEGER', briefing_minute: 'INTEGER', briefing_next: 'INTEGER', place: 'TEXT', lat: 'REAL', lon: 'REAL', pending: 'TEXT', calendar_alert: 'INTEGER' },
   };
   for (const [table, columns] of Object.entries(wanted)) {
     const present = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));

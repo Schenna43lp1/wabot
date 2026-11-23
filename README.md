@@ -5,7 +5,11 @@ Ein Bot für den Alltag, der per WhatsApp antwortet und lokal auf deinem PC läu
 - **Erinnerungen:** `erinnere mich morgen 9 an Arzt`, auch wiederkehrend und mit `später` zum Verschieben.
 - **Einkaufsliste und To-dos:** `einkauf Milch, Brot`, `todo Steuer`, `erledigt 2`.
 - **Notizen:** `notiz WLAN Gäste: sonne123`, wiederfinden mit `suche wlan`.
-- **Briefing:** jeden Morgen eine Nachricht mit Wetter, Erinnerungen, To-dos, Einkaufsliste und Preisänderungen.
+- **Kalender:** Termine aus Google Kalender oder Outlook in `termine` und im Briefing, auf Wunsch mit Bescheid kurz vorher.
+- **Geburtstage:** `geburtstag Anna 12.3.1990`, mit Bescheid 3 Tage vorher und am Tag.
+- **Haushaltsbuch:** `ausgabe 12,50 essen`, Monatsübersicht nach Kategorien, Budgets mit Warnung, Export für Excel.
+- **Rechner und Währungen:** `rechne 250 + 19%`, `trinkgeld 47,80`, `100 usd in eur` mit den Tageskursen der EZB.
+- **Briefing:** jeden Morgen eine Nachricht mit Wetter, Terminen, Erinnerungen, To-dos, Einkaufsliste und Preisänderungen.
 - **Preistracker:** Schick einen Produktlink. Der Bot prüft den Preis regelmäßig und schreibt dir, wenn er fällt, dein Zielpreis erreicht ist oder das Produkt wieder verfügbar ist.
 
 Beim Preistracker kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe als Diagramm schicken oder als Tabelle exportieren und mitrechnen, was du beim Kauf gespart hast. Alle Daten sichert er täglich.
@@ -51,21 +55,28 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 | Nachricht | Wirkung |
 |---|---|
 | `erinnere mich morgen 9 an Arzt` | einmalig |
-| `erinnere mich in 30 min an Wäsche` | auch `in 2 stunden`, `in einer halben stunde`, `in 3 tagen` |
+| `erinnere mich in 30 min an Wäsche` | auch `in 2 stunden`, `in einer halben stunde`, `in 3 tagen`, `in 1 monat` |
 | `erinnere mich um 15 uhr an Anruf` | heute, oder morgen, falls schon vorbei |
+| `erinnere mich halb 8 an Kino` | auch `viertel nach 9`, `viertel vor 9`, `dreiviertel 9`, `9h` |
 | `erinnere mich heute abend an …` | `früh` 8, `vormittags` 10, `mittags` 12, `nachmittags` 15, `abends` 19, `nachts` 22 Uhr |
-| `erinnere mich am Freitag 14:30 an …` | auch `am 24.12.` oder `am 1.1.2027` |
+| `erinnere mich am Freitag 14:30 an …` | auch `am fr`, `am 24.12.` oder `am 1.1.2027` |
+| `erinnere mich nächsten Montag an …` | nie heute; auch `nächste Woche` (Montag) und `am Wochenende` (Samstag) |
 | `Müll rausbringen morgen 7` | die Zeit darf auch am Ende stehen |
 | `erinnere mich täglich 21 an Tabletten` | auch `jeden Tag` |
 | `erinnere mich werktags 7 an Bus` | Montag bis Freitag |
-| `erinnere mich jeden Montag 7 an Müll` | auch `montags` |
+| `erinnere mich jeden Montag 7 an Müll` | auch `montags` oder `jeden mo` |
+| `erinnere mich alle 2 Wochen am Donnerstag 6:30 an Papier` | auch `alle 14 tage`, `alle 3 tage` |
 | `erinnere mich monatlich am 1. an Miete` | auch `jeden 15.`; am 31. heißt in kürzeren Monaten am letzten Tag |
+| `erinnere mich an Arzt` | ohne Zeit fragt der Bot nach, antworte dann z. B. mit `morgen 9` |
 | `erinnerungen` | alle mit Nummer |
+| `erinnerung 2 morgen 10` | verschieben; bei wiederkehrenden nur das nächste Mal, außer du gibst eine neue Regel an |
 | `erinnerung weg 2` | löschen |
 | `später` | die letzte Erinnerung in 10 Minuten noch einmal |
 | `später 1h` / `später morgen 9` | zu einer anderen Zeit |
 
-Ohne Uhrzeit gilt 9 Uhr. Erinnerungen kommen auch in der Ruhezeit. War der PC zur fälligen Zeit aus, kommt die Erinnerung beim nächsten Start, mit einem Hinweis auf die verpasste Zeit.
+Ohne Uhrzeit gilt 9 Uhr. `um 3` oder `halb 8` ohne Tag heißt nachmittags bzw. abends, wenn die Zeit am Morgen schon vorbei ist; ab 8 Uhr gilt die Zeit am Vormittag, notfalls am nächsten Tag. Die Bestätigung nennt immer die erkannte Zeit.
+
+Erinnerungen kommen auch in der Ruhezeit. War der PC zur fälligen Zeit aus, kommt die Erinnerung beim nächsten Start, mit einem Hinweis auf die verpasste Zeit.
 
 ### Einkaufsliste, To-dos und Notizen
 
@@ -76,7 +87,7 @@ Ohne Uhrzeit gilt 9 Uhr. Erinnerungen kommen auch in der Ruhezeit. War der PC zu
 | `todo Steuer machen` | auf die To-do-Liste, mehrere in eigenen Zeilen |
 | `todo` | To-do-Liste zeigen |
 | `erledigt 2` / `erledigt 2 3` | abhaken |
-| `erledigt Milch` | mit Namen abhaken |
+| `erledigt Milch, Brot` | mit Namen abhaken |
 | `einkauf leeren` | ganze Liste löschen |
 | `notiz WLAN Gäste: sonne123` | Notiz speichern, auch mehrzeilig |
 | `notizen` | alle Notizen |
@@ -86,6 +97,39 @@ Ohne Uhrzeit gilt 9 Uhr. Erinnerungen kommen auch in der Ruhezeit. War der PC zu
 | `rückgängig` | das zuletzt Gelöschte oder Abgehakte zurückholen |
 
 Die Nummern auf den Listen bleiben gleich, bis die Listen leer sind. `erledigt 2` und gleich danach `erledigt 3` treffen also, was zuletzt angezeigt wurde.
+
+### Kalender (Google, Outlook)
+
+Der Bot liest deinen Kalender über dessen geheimen iCal-Link. Er kann Termine nur lesen, nicht ändern, und braucht kein Passwort.
+
+1. Den Link kopieren:
+   - **Google Kalender:** calendar.google.com → ⚙️ Einstellungen → links den Kalender wählen → „Geheime Adresse im iCal-Format“.
+   - **Outlook / Microsoft 365:** outlook.com → ⚙️ Einstellungen → Kalender → Freigegebene Kalender → „Kalender veröffentlichen“ → Kalender und „Kann alle Details anzeigen“ wählen → Veröffentlichen → ICS-Link.
+2. Dem Bot schicken: `kalender https://…` (optional mit Namen: `kalender https://… Arbeit`).
+3. Wer den Link hat, sieht deine Termine. Im Chat „Nachricht an dich selbst“ löscht der Bot deine Nachricht mit dem Link danach selbst. Bei einer Zweitnummer lösch sie bitte selbst; der Bot darf fremde Nachrichten nicht löschen.
+
+Nur `https://`-Links werden angenommen, auch Weiterleitungen müssen verschlüsselt sein, damit der Link nie im Klartext durchs Netz geht.
+
+| Nachricht | Wirkung |
+|---|---|
+| `kalender` | Anleitung, oder die Termine, wenn einer verbunden ist |
+| `termine` | die nächsten 7 Tage, zusammen mit deinen Erinnerungen |
+| `kalender erinnern 15` | 15 Minuten vor jedem Termin Bescheid geben, auch in der Ruhezeit |
+| `kalender erinnern aus` | nicht mehr |
+| `kalender weg 1` | Kalender trennen |
+
+Bis zu 5 Kalender pro Person. Der Bot lädt sie höchstens alle 15 Minuten, Änderungen erscheinen also mit etwas Verzögerung. Ist ein Kalender nicht erreichbar, nutzt er die letzte Kopie und sagt sonst Bescheid. Serientermine, verschobene und abgesagte Einzeltermine und Zeitzonen (auch die Windows-Namen von Outlook) werden berücksichtigt. Ein Link, den du in Google oder Outlook zurücksetzt, funktioniert nicht mehr; dann den neuen schicken.
+
+### Geburtstage
+
+| Nachricht | Wirkung |
+|---|---|
+| `geburtstag Anna 12.3.1990` | speichern; das Jahr ist freiwillig, auch `12. März` geht |
+| `geburtstag Anna 13.3.1990` | denselben Namen noch einmal: Datum ändern |
+| `geburtstage` | alle, nach dem nächsten Termin sortiert, mit Alter |
+| `geburtstag weg 2` | löschen |
+
+Der Bot meldet sich 3 Tage vorher und am Tag selbst um 9 Uhr, in der Ruhezeit erst danach. Geburtstage stehen auch in `termine` und im Briefing. Wer am 29. Februar geboren ist, feiert in anderen Jahren am 28.
 
 ### Wetter und Briefing
 
@@ -99,7 +143,46 @@ Die Nummern auf den Listen bleiben gleich, bis die Listen leer sind. `erledigt 2
 | `briefing werktags 6:30` | Montag bis Freitag |
 | `briefing aus` | nicht mehr schicken |
 
-Das Briefing enthält das Wetter, die Erinnerungen des Tages, offene To-dos, die Einkaufsliste und Produkte, die in den letzten 24 Stunden günstiger wurden oder den Zielpreis erreicht haben. Liegt es in der Ruhezeit, kommt es an deren Ende.
+Das Briefing enthält das Wetter, die restlichen Termine und Erinnerungen des Tages, offene To-dos, die Einkaufsliste und Produkte, die in den letzten 24 Stunden günstiger wurden oder den Zielpreis erreicht haben. Liegt es in der Ruhezeit, kommt es an deren Ende.
+
+## Geld
+
+`hilfe geld` zeigt alle Befehle.
+
+### Haushaltsbuch
+
+| Nachricht | Wirkung |
+|---|---|
+| `ausgabe 12,50 essen` | eintragen; das erste Wort ist die Kategorie |
+| `ausgabe 12,50 essen Pizza mit Tom` | mit Notiz |
+| `ausgabe 20 chf bahn` | in anderer Währung, wird getrennt summiert |
+| `ausgaben` | dieser Monat nach Kategorien, mit den letzten Einträgen |
+| `ausgaben oktober` / `ausgaben letzter monat` / `ausgaben 2026` | anderer Zeitraum |
+| `ausgaben essen` | nur eine Kategorie |
+| `ausgabe weg 3` | löschen, `rückgängig` holt sie zurück |
+| `ausgaben export` | alle Ausgaben als CSV-Tabelle |
+| `budget 800` | Monatsbudget |
+| `budget essen 200` | Budget für eine Kategorie |
+| `budget` | Stand aller Budgets |
+| `budget aus` / `budget essen aus` | entfernen |
+
+Beim Eintragen sagt der Bot, wie viel diesen Monat schon ausgegeben ist, und warnt bei 80 % eines Budgets und beim Überschreiten. Am 1. jedes Monats um 9 Uhr kommt der Rückblick auf den Vormonat. Kategorien sind frei wählbar; für gängige wie `essen`, `tanken`, `miete` oder `freizeit` gibt es ein passendes Symbol.
+
+### Rechner und Währungen
+
+| Nachricht | Wirkung |
+|---|---|
+| `rechne 12,5*3+7` | rechnen; auch `x`, `:`, `^`, Klammern und `wurzel` |
+| `rechne 250 + 19%` | plus 19 Prozent (auch `- 20%`) |
+| `rechne 19% von 250` | Prozentwert |
+| `= 2^10` | kurz für `rechne` |
+| `trinkgeld 47,80` | 5, 10 und 15 % mit aufgerundeter Summe |
+| `trinkgeld 47,80 10%` | ein bestimmter Satz |
+| `100 usd in eur` | umrechnen, auch `$100 in €` oder `100 Dollar nach Euro` |
+| `umrechnen 50 chf` | in deine Währung (`DEFAULT_CURRENCY`); Euro in USD, CHF und GBP |
+| `kurs usd` | Kurs in beide Richtungen |
+
+Zahlen schreibst du wie gewohnt: `12,5` oder `12.5`, `1.250` ist tausendzweihundertfünfzig. Die Kurse sind die Referenzkurse der Europäischen Zentralbank, werktags gegen 16 Uhr aktualisiert, für rund 30 Währungen.
 
 ## Befehle für den Preistracker
 
@@ -203,7 +286,8 @@ Grenzen:
 - Der Bot nutzt [Baileys](https://github.com/WhiskeySockets/Baileys), eine **inoffizielle** WhatsApp-Anbindung (Version 7.0.0-rc14, ein Release Candidate). **WhatsApp kann die Nummer sperren.** Nur privat und in kleinem Umfang verwenden.
 - `data/auth` (auch `data/auth-alt-…`) gewährt Zugriff auf das WhatsApp-Konto. **Niemals weitergeben oder hochladen.** Der Ordner `data` und `.env` stehen in `.gitignore`.
 - Links auf Adressen im Heimnetz werden abgelehnt.
-- Für das Wetter gehen der Ortsname, den du bei `ort` oder `wetter` angibst, und dessen Koordinaten an [Open-Meteo](https://open-meteo.com). Erinnerungen, Listen und Notizen verlassen den PC nie.
+- Für das Wetter gehen der Ortsname, den du bei `ort` oder `wetter` angibst, und dessen Koordinaten an [Open-Meteo](https://open-meteo.com). Kalender lädt der Bot nur von der Adresse im Link (Google oder Microsoft). Die Wechselkurse holt er bei der EZB, ohne etwas über dich mitzuschicken. Erinnerungen, Listen, Notizen, Geburtstage und Ausgaben verlassen den PC nie.
+- Kalender-Links sind geheim und liegen in `data/tracker.db`. Auch deshalb gehört der Ordner `data` nicht ins Netz.
 - Alle Daten liegen lokal in `data/tracker.db`. Beim Export geht die Tabelle über WhatsApp an die Person, die sie angefordert hat.
 
 ## Backup

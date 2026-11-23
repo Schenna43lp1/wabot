@@ -104,6 +104,58 @@ export async function fetchPage(input) {
   }
 }
 
+/** The link is the password of the calendar, so it never travels unencrypted. */
+function encryptedUrl(input) {
+  const url = validateUrl(input);
+  if (url.protocol !== 'https:') {
+    throw new UserError('Kalender-Links müssen mit https:// beginnen, sonst ginge der geheime Link unverschlüsselt durchs Netz.', 'invalid');
+  }
+  return url;
+}
+
+/** A calendar (.ics) behind a secret link, with the same protection as shop pages. */
+export async function fetchCalendar(link) {
+  let url = encryptedUrl(link.replace(/^webcals?:\/\//i, 'https://'));
+  const signal = AbortSignal.timeout(25_000);
+  try {
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const response = await fetch(url, {
+        dispatcher,
+        signal,
+        redirect: 'manual',
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; Alltagshelfer/1.0)', accept: 'text/calendar, text/plain;q=0.5' },
+      });
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location) {
+        await response.body?.cancel();
+        url = encryptedUrl(new URL(location, url).href);
+        continue;
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        if (response.status === 404 || response.status === 410 || response.status === 401 || response.status === 403) {
+          throw new UserError(`Den Kalender gibt es unter diesem Link nicht (mehr) (HTTP ${response.status}). Wurde der Link zurückgesetzt?`, 'gone');
+        }
+        throw new UserError(`Der Kalender ist gerade nicht erreichbar (HTTP ${response.status}).`, 'temporary');
+      }
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of response.body ?? []) {
+        size += chunk.length;
+        if (size > MAX_BYTES) throw new UserError('Der Kalender ist zu groß.', 'invalid');
+        chunks.push(chunk);
+      }
+      return new TextDecoder('utf-8').decode(Buffer.concat(chunks));
+    }
+    throw new UserError('Der Kalender-Link leitet im Kreis weiter.', 'invalid');
+  } catch (error) {
+    if (error instanceof UserError) throw error;
+    if (error.cause instanceof UserError) throw error.cause;
+    if (signal.aborted) throw new UserError('Der Kalender antwortet gerade nicht.', 'temporary');
+    throw new UserError(`Der Kalender ist gerade nicht erreichbar (${error.cause?.code ?? error.message}).`, 'temporary');
+  }
+}
+
 function decode(buffer, contentType) {
   const charset = contentType.match(/charset=["']?([\w-]+)/i)?.[1];
   if (charset) {

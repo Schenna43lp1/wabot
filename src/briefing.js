@@ -1,14 +1,13 @@
-// "briefing täglich 7": every morning weather, reminders, to-dos and prices in one message.
+// "briefing täglich 7": every morning weather, appointments, reminders, to-dos and prices in one message.
 import { UserError } from './errors.js';
 import { priceChanges } from './report.js';
 import { capitalize, clockText, DAILY, DAYS, isQuiet, nextReport, parseClock, parseReport, reportText } from './schedule.js';
 import { todayText, weatherText } from './weather.js';
-import { shortTime } from './when.js';
 
 const OFF = /^(aus|weg|kein|keine|stopp|stop)$/i;
 const SHOWN = 5;
 
-export function createBriefing({ db, weather, reminders, lists, now = Date.now }) {
+export function createBriefing({ db, weather, calendar, birthdays, lists, now = Date.now }) {
   async function weatherLine(settings) {
     if (settings?.lat == null) return null;
     try {
@@ -33,10 +32,19 @@ export function createBriefing({ db, weather, reminders, lists, now = Date.now }
     const forecast = await weatherLine(settings);
     if (forecast) sections.push(forecast);
 
-    const due = reminders.today(user, at);
-    sections.push(due.length
-      ? `⏰ *Heute*\n${due.map((reminder) => `${shortTime(reminder.due, at)} ${reminder.text}`).join('\n')}`
-      : '⏰ Heute keine Erinnerungen.');
+    const today = await calendar.today(user, at);
+    const nothing = today.connected ? 'Heute keine Termine und Erinnerungen.' : 'Heute keine Erinnerungen.';
+    const agenda = [today.lines.length ? `📅 *Heute*\n${today.lines.join('\n')}` : `📅 ${nothing}`];
+    if (today.failed.length) agenda.push(`⚠️ Kalender nicht erreichbar: ${today.failed.join(', ')}`);
+    sections.push(agenda.join('\n'));
+
+    // Today's birthdays are in the list above, the coming week's need a reminder now.
+    const tomorrow = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime();
+    const soon = birthdays.between(user, tomorrow, tomorrow + 7 * 86_400_000).map(({ start, name, age }) => {
+      const when = new Date(start);
+      return `${capitalize(DAYS[when.getDay()]).slice(0, 2)} ${when.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}: ${name}${age != null ? ` (${age})` : ''}`;
+    });
+    if (soon.length) sections.push(`🎁 *Bald Geburtstag*\n${soon.join('\n')}`);
 
     const todos = lists.items(user, 'todo');
     if (todos.length) {
@@ -78,7 +86,7 @@ export function createBriefing({ db, weather, reminders, lists, now = Date.now }
     db.saveSettings(user, { briefing_day: when.day, briefing_minute: when.minute, briefing_next: next });
 
     const settings = db.settings(user);
-    const lines = [`☀️ Das Briefing kommt ${reportText(when)}: Wetter, Erinnerungen, To-dos, Einkauf und Preise.`];
+    const lines = [`☀️ Das Briefing kommt ${reportText(when)}: Wetter, Termine, Erinnerungen, To-dos, Einkauf und Preise.`];
     if (isQuiet(settings, next)) lines.push(`Das liegt in deiner Ruhezeit, es kommt daher um ${clockText(settings.quiet_to)} Uhr.`);
     if (settings.lat == null) lines.push('Für das Wetter schick mir deinen Ort, z. B. `ort Wien`.');
     lines.push('Vorschau: `briefing`');

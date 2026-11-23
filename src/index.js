@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { dailyBackup } from './backup.js';
+import { queueBirthdays } from './birthdays.js';
 import { queueBriefings } from './briefing.js';
 import { createCommands } from './commands.js';
 import { loadConfig } from './config.js';
@@ -83,6 +84,9 @@ function backup() {
   }
 }
 
+// Calendars are downloaded at most every 15 minutes, a slow one must not pile up.
+let alerting = false;
+
 function tick() {
   backup();
   try {
@@ -95,9 +99,23 @@ function tick() {
   } catch (error) {
     log(`Übersicht fehlgeschlagen: ${error.stack}`);
   }
+  try {
+    queueBirthdays(db);
+    handle.queueMonthlyExpenses();
+    db.pruneOnce(Date.now() - 400 * 86_400_000);
+  } catch (error) {
+    log(`Geburtstage oder Monatsrückblick fehlgeschlagen: ${error.stack}`);
+  }
   queueBriefings(db, handle.composeBriefing)
     .then(() => whatsapp.flush())
     .catch((error) => log(`Briefing fehlgeschlagen: ${error.stack}`));
+  if (!alerting) {
+    alerting = true;
+    handle.queueCalendarAlerts()
+      .then(() => whatsapp.flush())
+      .catch((error) => log(`Kalender fehlgeschlagen: ${error.stack}`))
+      .finally(() => { alerting = false; });
+  }
   tracker.checkDue().catch((error) => log(`Preisprüfung fehlgeschlagen: ${error.stack}`));
   void whatsapp.flush();
   db.pruneMessages();
