@@ -1,8 +1,14 @@
-# WhatsApp-Preistracker
+# WhatsApp-Alltagshelfer
 
-Schick dem Bot einen Produktlink per WhatsApp. Er prüft den Preis regelmäßig und schreibt dir, wenn er fällt, dein Zielpreis erreicht ist oder das Produkt wieder verfügbar ist.
+Ein Bot für den Alltag, der per WhatsApp antwortet und lokal auf deinem PC läuft:
 
-Dazu kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe als Diagramm schicken oder als Tabelle exportieren und mitrechnen, was du beim Kauf gespart hast. Die Preisdaten sichert er täglich.
+- **Erinnerungen:** `erinnere mich morgen 9 an Arzt`, auch wiederkehrend und mit `später` zum Verschieben.
+- **Einkaufsliste und To-dos:** `einkauf Milch, Brot`, `todo Steuer`, `erledigt 2`.
+- **Notizen:** `notiz WLAN Gäste: sonne123`, wiederfinden mit `suche wlan`.
+- **Briefing:** jeden Morgen eine Nachricht mit Wetter, Erinnerungen, To-dos, Einkaufsliste und Preisänderungen.
+- **Preistracker:** Schick einen Produktlink. Der Bot prüft den Preis regelmäßig und schreibt dir, wenn er fällt, dein Zielpreis erreicht ist oder das Produkt wieder verfügbar ist.
+
+Beim Preistracker kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe als Diagramm schicken oder als Tabelle exportieren und mitrechnen, was du beim Kauf gespart hast. Alle Daten sichert er täglich.
 
 ## Start
 
@@ -36,7 +42,66 @@ So klingelt dein Handy bei jedem Alarm, und dein Hauptkonto ist keinem Sperrrisi
 
 Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 
-## Befehle
+## Befehle für den Alltag
+
+`hilfe` zeigt eine Übersicht, `hilfe alltag` und `hilfe preise` alle Befehle.
+
+### Erinnerungen
+
+| Nachricht | Wirkung |
+|---|---|
+| `erinnere mich morgen 9 an Arzt` | einmalig |
+| `erinnere mich in 30 min an Wäsche` | auch `in 2 stunden`, `in einer halben stunde`, `in 3 tagen` |
+| `erinnere mich um 15 uhr an Anruf` | heute, oder morgen, falls schon vorbei |
+| `erinnere mich heute abend an …` | `früh` 8, `vormittags` 10, `mittags` 12, `nachmittags` 15, `abends` 19, `nachts` 22 Uhr |
+| `erinnere mich am Freitag 14:30 an …` | auch `am 24.12.` oder `am 1.1.2027` |
+| `Müll rausbringen morgen 7` | die Zeit darf auch am Ende stehen |
+| `erinnere mich täglich 21 an Tabletten` | auch `jeden Tag` |
+| `erinnere mich werktags 7 an Bus` | Montag bis Freitag |
+| `erinnere mich jeden Montag 7 an Müll` | auch `montags` |
+| `erinnere mich monatlich am 1. an Miete` | auch `jeden 15.`; am 31. heißt in kürzeren Monaten am letzten Tag |
+| `erinnerungen` | alle mit Nummer |
+| `erinnerung weg 2` | löschen |
+| `später` | die letzte Erinnerung in 10 Minuten noch einmal |
+| `später 1h` / `später morgen 9` | zu einer anderen Zeit |
+
+Ohne Uhrzeit gilt 9 Uhr. Erinnerungen kommen auch in der Ruhezeit. War der PC zur fälligen Zeit aus, kommt die Erinnerung beim nächsten Start, mit einem Hinweis auf die verpasste Zeit.
+
+### Einkaufsliste, To-dos und Notizen
+
+| Nachricht | Wirkung |
+|---|---|
+| `einkauf Milch, Brot, Eier` | auf die Einkaufsliste, durch Komma getrennt |
+| `einkauf` | Einkaufsliste zeigen |
+| `todo Steuer machen` | auf die To-do-Liste, mehrere in eigenen Zeilen |
+| `todo` | To-do-Liste zeigen |
+| `erledigt 2` / `erledigt 2 3` | abhaken |
+| `erledigt Milch` | mit Namen abhaken |
+| `einkauf leeren` | ganze Liste löschen |
+| `notiz WLAN Gäste: sonne123` | Notiz speichern, auch mehrzeilig |
+| `notizen` | alle Notizen |
+| `notiz 3` | Notiz 3 ganz lesen |
+| `notiz weg 3` | löschen |
+| `suche wlan` | in Notizen, Listen und Erinnerungen suchen |
+| `rückgängig` | das zuletzt Gelöschte oder Abgehakte zurückholen |
+
+Die Nummern auf den Listen bleiben gleich, bis die Listen leer sind. `erledigt 2` und gleich danach `erledigt 3` treffen also, was zuletzt angezeigt wurde.
+
+### Wetter und Briefing
+
+| Nachricht | Wirkung |
+|---|---|
+| `ort Wien` | Ort für das Wetter speichern |
+| `wetter` | heute und morgen am gespeicherten Ort |
+| `wetter Graz` | einmalig für einen anderen Ort |
+| `briefing` | Briefing jetzt schicken |
+| `briefing 7` | jeden Tag um 7 Uhr |
+| `briefing werktags 6:30` | Montag bis Freitag |
+| `briefing aus` | nicht mehr schicken |
+
+Das Briefing enthält das Wetter, die Erinnerungen des Tages, offene To-dos, die Einkaufsliste und Produkte, die in den letzten 24 Stunden günstiger wurden oder den Zielpreis erreicht haben. Liegt es in der Ruhezeit, kommt es an deren Ende.
+
+## Befehle für den Preistracker
 
 | Nachricht | Wirkung |
 |---|---|
@@ -65,6 +130,7 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 | `ruhe aus` | Ruhezeit beenden |
 | `übersicht` | Änderungen der letzten 7 Tage |
 | `übersicht täglich 8` | jeden Tag die Änderungen der letzten 24 Stunden |
+| `übersicht werktags 8` | Montag bis Freitag |
 | `übersicht sonntag 18:30` | jede Woche die Änderungen der letzten 7 Tage |
 | `übersicht aus` | nicht mehr schicken |
 | `export` | Produkte und Preisverlauf als CSV-Datei für Excel |
@@ -79,7 +145,7 @@ Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
 
 Der Bot versteht auch `Lösche 3.`, `3 löschen`, `löschen nr. 3`, `liste bitte` oder einen Link statt der Nummer (`löschen https://…`). Bei Tippfehlern und Produktnamen schlägt er den passenden Befehl vor, führt ihn aber nicht von selbst aus.
 
-Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, damit er deine Notizen nicht kommentiert: keine Tippfehler-Vorschläge, keine Begrüßung, eine Zahl allein zählt nicht, und Wörter wie `pause`, `name` oder `weiter` gelten nur mit gültiger Nummer oder `alle`.
+Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, damit er deine Notizen nicht kommentiert: keine Tippfehler-Vorschläge, keine Begrüßung, eine Zahl allein zählt nicht, und Wörter wie `pause`, `name` oder `weiter` gelten nur mit gültiger Nummer oder `alle`. `suche`, `später`, `erledigt`, `wetter` und `ort` antworten dort nur, wenn sie etwas finden. `wetter` mit Ort fragt dort nie beim Wetterdienst nach, `ort` nur bei höchstens drei Wörtern.
 
 ## Wann kommt eine Nachricht?
 
@@ -137,11 +203,12 @@ Grenzen:
 - Der Bot nutzt [Baileys](https://github.com/WhiskeySockets/Baileys), eine **inoffizielle** WhatsApp-Anbindung (Version 7.0.0-rc14, ein Release Candidate). **WhatsApp kann die Nummer sperren.** Nur privat und in kleinem Umfang verwenden.
 - `data/auth` (auch `data/auth-alt-…`) gewährt Zugriff auf das WhatsApp-Konto. **Niemals weitergeben oder hochladen.** Der Ordner `data` und `.env` stehen in `.gitignore`.
 - Links auf Adressen im Heimnetz werden abgelehnt.
+- Für das Wetter gehen der Ortsname, den du bei `ort` oder `wetter` angibst, und dessen Koordinaten an [Open-Meteo](https://open-meteo.com). Erinnerungen, Listen und Notizen verlassen den PC nie.
 - Alle Daten liegen lokal in `data/tracker.db`. Beim Export geht die Tabelle über WhatsApp an die Person, die sie angefordert hat.
 
 ## Backup
 
-Der Bot legt einmal am Tag eine Kopie der Preisdaten in `data/backup` an und behält die letzten 7. Die WhatsApp-Verknüpfung ist nicht enthalten. Gegen einen Plattendefekt hilft nur eine Kopie auf einem anderen Laufwerk.
+Der Bot legt einmal am Tag eine Kopie aller Daten (Preise, Erinnerungen, Listen, Notizen) in `data/backup` an und behält die letzten 7. Die WhatsApp-Verknüpfung ist nicht enthalten. Gegen einen Plattendefekt hilft nur eine Kopie auf einem anderen Laufwerk.
 
 Wiederherstellen:
 

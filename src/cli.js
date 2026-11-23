@@ -177,7 +177,7 @@ function showStatus() {
 }
 
 async function main() {
-  process.title = 'WhatsApp-Preistracker';
+  process.title = 'WhatsApp-Alltagshelfer';
   if (!process.stdin.isTTY) {
     console.log('Bitte start.cmd per Doppelklick öffnen. Ohne Fenster: npm start');
     process.exitCode = 1;

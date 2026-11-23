@@ -2,11 +2,13 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { dailyBackup } from './backup.js';
+import { queueBriefings } from './briefing.js';
 import { createCommands } from './commands.js';
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
 import { EXIT } from './exit-codes.js';
 import { getProduct } from './product.js';
+import { queueReminders } from './reminders.js';
 import { queueReports } from './report.js';
 import { createTracker } from './tracker.js';
 import { startWhatsApp } from './whatsapp.js';
@@ -36,7 +38,7 @@ const lock = new DatabaseSync(join(config.dataDir, 'instance.lock'));
 try {
   lock.exec('BEGIN EXCLUSIVE');
 } catch {
-  fail('Der Preistracker läuft bereits.');
+  fail('Der Bot läuft bereits.');
 }
 
 const db = openDatabase(join(config.dataDir, 'tracker.db'));
@@ -66,12 +68,13 @@ const tracker = createTracker({
   getProduct: (url, selector) => getProduct(url, { selector, currency: config.currency }),
   notify: () => void whatsapp?.flush(),
 });
-whatsapp = await startWhatsApp({ db, config, handle: createCommands({ db, tracker, config }), log, onFatal: fail });
+const handle = createCommands({ db, tracker, config });
+whatsapp = await startWhatsApp({ db, config, handle, log, onFatal: fail });
 
 let backupFailed = false;
 function backup() {
   try {
-    if (dailyBackup(db, config.dataDir)) log('Sicherung der Preisdaten angelegt (Unterordner backup).');
+    if (dailyBackup(db, config.dataDir)) log('Sicherung der Daten angelegt (Unterordner backup).');
     backupFailed = false;
   } catch (error) {
     // Retried every minute, but mentioned once.
@@ -83,10 +86,18 @@ function backup() {
 function tick() {
   backup();
   try {
+    queueReminders(db);
+  } catch (error) {
+    log(`Erinnerungen fehlgeschlagen: ${error.stack}`);
+  }
+  try {
     queueReports(db);
   } catch (error) {
     log(`Übersicht fehlgeschlagen: ${error.stack}`);
   }
+  queueBriefings(db, handle.composeBriefing)
+    .then(() => whatsapp.flush())
+    .catch((error) => log(`Briefing fehlgeschlagen: ${error.stack}`));
   tracker.checkDue().catch((error) => log(`Preisprüfung fehlgeschlagen: ${error.stack}`));
   void whatsapp.flush();
   db.pruneMessages();
@@ -94,4 +105,4 @@ function tick() {
 tick();
 setInterval(tick, 60_000);
 
-log(`Preistracker gestartet, Prüfung alle ${config.intervalMs / 60_000} Minuten. Beenden mit Q.`);
+log(`Alltagshelfer gestartet, Preisprüfung alle ${config.intervalMs / 60_000} Minuten. Beenden mit Q.`);
