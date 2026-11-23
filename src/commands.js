@@ -1,7 +1,10 @@
+import { createBirthdays } from './birthdays.js';
 import { createBriefing } from './briefing.js';
+import { createCalendar, isCalendarLink } from './calendar.js';
 import { UserError } from './errors.js';
-import { validateUrl } from './fetch-page.js';
+import { fetchCalendar, validateUrl } from './fetch-page.js';
 import { priceChart, HEIGHT, WIDTH } from './chart.js';
+import { createExpenses } from './expenses.js';
 import { exportCsv } from './export.js';
 import { HELP_TOPICS, helpText } from './help.js';
 import { actionOf, parseInput, parseTarget, suggest } from './input.js';
@@ -10,8 +13,10 @@ import { advice, details, listEntry, priceText, productName, targetText } from '
 import { formatMoney } from './money.js';
 import { createOptions } from './options.js';
 import { createPurchases } from './purchases.js';
+import { createRates } from './rates.js';
 import { createReminders } from './reminders.js';
 import { currentSeries, periodStats, sparkline } from './stats.js';
+import { createTools, parseConversion } from './tools.js';
 import { createWeather } from './weather.js';
 
 const TRACKING_PARAMS = /^(utm_\w+|gclid|gbraid|wbraid|fbclid|msclkid|igshid|mc_cid|mc_eid)$/i;
@@ -45,6 +50,12 @@ const WELCOME = `👋 *Hallo, ich bin dein Alltagshelfer.*
 
 \`hilfe\` zeigt alle Befehle.`;
 
+const CONVERSION = /^\s*\S*\d[\d.,]*\s*\S*\s+(?:in|nach|to|→)\s+\S+\s*$/i;
+const userMessage = (error) => {
+  if (error instanceof UserError) return error.message;
+  throw error;
+};
+
 const EMPTY = 'Du beobachtest noch nichts. Schick mir einfach einen Produktlink, am schnellsten über „Teilen“ im Shop.';
 const NEEDS_PRICE = 'Ein Ziel in Prozent geht erst, wenn ein Preis da ist.';
 
@@ -57,12 +68,16 @@ function normalize(link) {
   return url.href;
 }
 
-export function createCommands({ db, tracker, config, weather = createWeather(), now = Date.now }) {
+export function createCommands({ db, tracker, config, weather = createWeather(), calendarFetch = fetchCalendar, rates = createRates(), now = Date.now }) {
   const options = createOptions({ db, config, empty: EMPTY, now });
   const purchases = createPurchases({ db, config, now });
   const reminders = createReminders({ db, now });
   const lists = createLists({ db, now });
-  const briefing = createBriefing({ db, weather, reminders, lists, now });
+  const birthdays = createBirthdays({ db, now });
+  const calendar = createCalendar({ db, fetchCalendar: calendarFetch, birthdays, now });
+  const briefing = createBriefing({ db, weather, calendar, birthdays, lists, now });
+  const expenses = createExpenses({ db, config, now });
+  const tools = createTools({ rates, config });
   function yourProducts(user) {
     const products = db.products(user);
     if (!products.length) return EMPTY;
@@ -315,6 +330,8 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
       db.clearTrash(user);
       if (deleted.kind === 'items') return lists.restoreItems(user, deleted);
       if (deleted.kind === 'note') return lists.restoreNote(user, deleted);
+      if (deleted.kind === 'expense') return expenses.restore(user, deleted);
+      if (deleted.kind === 'birthday') return birthdays.restore(user, deleted);
       return reminders.restore(user, deleted);
     }
     const same = db.byUrl(user, deleted.product.url);
@@ -365,6 +382,14 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
    * quiet = self-chat: only answer what is clearly meant for the bot.
    */
   async function handle(user, text, { quiet = false } = {}) {
+    // "morgen 9" after "Wann soll ich dich erinnern?"
+    const answered = reminders.answer(user, text);
+    if (answered) return answered;
+    // A calendar link on its own is meant to connect the calendar, not to watch a price.
+    if (isCalendarLink(text)) return calendar.command(user, text.trim(), quiet).catch(userMessage);
+    // "= 12*3" and "100 usd in eur" need no command word.
+    if (/^\s*=/.test(text)) return tools.calc(text.trim().slice(1), quiet);
+    if (CONVERSION.test(text) && parseConversion(text)) return tools.convert(text, quiet).catch(userMessage);
     const input = parseInput(text);
     if (!input) return quiet ? null : unknown(user, text);
     const { action, ref, value } = input;
@@ -385,6 +410,15 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
         case 'weather': return await briefing.weather(user, value, quiet);
         case 'place': return await briefing.place(user, value, quiet);
         case 'briefing': return await briefing.briefing(user, value, quiet);
+        case 'calendar': return await calendar.command(user, value, quiet);
+        case 'birthday': return /^geburtstage$/i.test(text.trim()) ? birthdays.list(user) : birthdays.add(user, value, quiet);
+        case 'calc': return tools.calc(value, quiet);
+        case 'tip': return tools.tip(value, quiet);
+        case 'convert': return await tools.convert(value, quiet);
+        case 'rate': return await tools.exchangeRate(value, quiet);
+        case 'expense': return expenses.add(user, value, quiet);
+        case 'expenses': return expenses.overview(user, value, quiet);
+        case 'budget': return expenses.budget(user, value, quiet);
         case 'hello': return quiet ? null : WELCOME;
         case 'thanks': return quiet ? null : 'Gern! 👍';
         case 'list': return list(user);
@@ -430,5 +464,7 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
   }
   // For the scheduled briefing in index.js
   handle.composeBriefing = briefing.compose;
+  handle.queueCalendarAlerts = calendar.queueAlerts;
+  handle.queueMonthlyExpenses = expenses.queueMonthly;
   return handle;
 }

@@ -25,7 +25,16 @@ const WORDS = {
   chart: ['diagramm', 'grafik', 'chart'],
   // Everyday helper
   remind: ['erinnere', 'erinner', 'erinnern', 'erinnerung', 'remind'],
-  reminders: ['erinnerungen', 'termine'],
+  reminders: ['erinnerungen'],
+  calendar: ['kalender', 'calendar', 'termine', 'agenda'],
+  birthday: ['geburtstag', 'geburtstage', 'gebtag'],
+  calc: ['rechne', 'berechne', 'rechner', 'calc'],
+  tip: ['trinkgeld'],
+  convert: ['umrechnen', 'umrechnung', 'wechselkurs'],
+  rate: ['kurs'],
+  expense: ['ausgabe', 'ausgegeben'],
+  expenses: ['ausgaben'],
+  budget: ['budget'],
   snooze: ['später', 'spaeter', 'snooze'],
   shopping: ['einkauf', 'einkaufen', 'einkaufsliste'],
   todo: ['todo', 'todos', 'to-do', 'to-dos', 'aufgabe', 'aufgaben'],
@@ -43,11 +52,11 @@ const TAKES_ALL = new Set(['pause', 'resume']);
 const TAKES_SETTING = new Set(['quietHours', 'report']);
 const NEEDS_VALUE = new Set(['selector', 'rename', 'threshold']);
 // These take free text, links included: "notiz Rezept https://…" is a note, not a product.
-export const FREE_TEXT = new Set(['remind', 'reminders', 'snooze', 'shopping', 'todo', 'done', 'note', 'notes', 'search', 'weather', 'place', 'briefing', 'help']);
+export const FREE_TEXT = new Set(['remind', 'reminders', 'snooze', 'shopping', 'todo', 'done', 'note', 'notes', 'search', 'weather', 'place', 'briefing', 'calendar', 'birthday', 'calc', 'tip', 'convert', 'rate', 'expense', 'expenses', 'budget', 'help']);
 
 // Only these are suggested for typos.
 const SUGGESTED = ['hilfe', 'liste', 'rückgängig', 'zeige', 'prüfen', 'ziel', 'verlauf', 'löschen', 'selektor', 'pause', 'schwelle', 'übersicht', 'export', 'gekauft', 'ersparnis', 'diagramm',
-  'erinnerungen', 'einkauf', 'erledigt', 'notiz', 'notizen', 'wetter', 'briefing'];
+  'erinnerungen', 'einkauf', 'erledigt', 'notiz', 'notizen', 'wetter', 'briefing', 'kalender', 'termine', 'geburtstage', 'rechne', 'trinkgeld', 'ausgabe', 'ausgaben', 'budget'];
 
 const LINK = /https?:\/\/[^\s<>]+/gi;
 // "3", "#3", "3.", "3:", "nr. 3", "nummer 3"

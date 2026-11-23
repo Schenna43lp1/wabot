@@ -16,12 +16,17 @@ test('WhatsApp: access, self-chat, alerts and no loops', async (t) => {
   const { db, config, handle, tracker, state } = setup({ ALLOWED_NUMBERS: FRIEND });
   config.dataDir = mkdtempSync(join(tmpdir(), 'pricetracker-test-'));
   const sent = [];
+  const deleted = [];
   const socket = {
     ev: new EventEmitter(),
     user: { id: `${ME}:7@s.whatsapp.net`, lid: '111:7@lid' },
     signalRepository: { lidMapping: { getPNForLID: async (lid) => (lid === '333@lid' ? `${FRIEND}:0@s.whatsapp.net` : null) } },
     end() {},
-    async sendMessage(to, { text }) {
+    async sendMessage(to, { text, delete: key }) {
+      if (key) {
+        deleted.push({ to, id: key.id });
+        return undefined;
+      }
       sent.push({ to, text });
       const result = { key: { id: `sent${sent.length}`, remoteJid: to, fromMe: true }, message: { conversation: text } };
       // Baileys echoes our own messages, just like this.
@@ -71,6 +76,16 @@ test('WhatsApp: access, self-chat, alerts and no loops', async (t) => {
   assert.equal(sent[0].to, jid(FRIEND));
   assert.match(sent[0].text, /Zielpreis/);
   assert.equal(db.queued().length, 0);
+
+  // The secret calendar link is deleted from the self-chat, and only there.
+  const calendarLink = 'https://calendar.google.com/calendar/ical/secret/basic.ics';
+  assert.match((await receive({ remoteJid: jid(ME), fromMe: true }, `kalender ${calendarLink}`, { id: 'cal1' }))[0].text, /Kalender verbunden/);
+  assert.deepEqual(deleted, [{ to: jid(ME), id: 'cal1' }]);
+  await receive({ remoteJid: jid(ME), fromMe: true }, calendarLink, { id: 'cal2' });
+  assert.deepEqual(deleted.map((item) => item.id), ['cal1', 'cal2']);
+  await receive(fromFriend, `kalender ${calendarLink}`, { id: 'cal3' });
+  await receive({ remoteJid: jid(ME), fromMe: true }, 'notiz Rezept https://chefkoch.de/rezept/1', { id: 'note1' });
+  assert.deepEqual(deleted.map((item) => item.id), ['cal1', 'cal2'], 'not the friend\'s message, not a note');
 
   socket.ev.emit('connection.update', { connection: 'open' });
   db.queue('499999999999', 'secret');

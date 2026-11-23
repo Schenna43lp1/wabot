@@ -6,6 +6,7 @@ import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import { authorize } from './access.js';
 import { EXIT } from './exit-codes.js';
+import { connectsCalendar } from './calendar.js';
 import { isQuiet } from './schedule.js';
 
 // Prefix of every bot message, so the self-chat cannot answer itself in a loop.
@@ -158,6 +159,14 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
         setPresence(socket, 'paused', sender.chat);
       }
       if (reply) await answer(sender, reply);
+      // The calendar link works like a password. In the self-chat the message is ours, so it can go.
+      if (sender.self && key.fromMe && text && connectsCalendar(text)) {
+        try {
+          await socket.sendMessage(sender.chat, { delete: key });
+        } catch (error) {
+          log(`Nachricht mit Kalender-Link nicht gelöscht: ${error.message}`);
+        }
+      }
     });
     queues.set(sender.user, job.catch(() => {}));
     await job;

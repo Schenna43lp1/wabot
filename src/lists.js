@@ -85,13 +85,23 @@ export function createLists({ db, now = Date.now }) {
         return `${missing.length === 1 ? 'Nummer' : 'Nummern'} ${missing.join(', ')} gibt es nicht.\n\n${overview(user)}`;
       }
     } else {
-      const search = text.toLowerCase();
-      const exact = all.filter((item) => item.text.toLowerCase() === search);
-      found = exact.length ? exact : all.filter((item) => item.text.toLowerCase().includes(search));
-      if (!found.length) return quiet ? null : `„${text.slice(0, 40)}“ steht auf keiner Liste.\n\n${overview(user)}`;
-      if (found.length > 1) {
-        if (quiet) return null;
-        return `Welches meinst du?\n${found.slice(0, 5).map((item) => `\`erledigt ${item.nr}\` ${item.text}`).join('\n')}`;
+      const byName = (name) => {
+        const search = name.toLowerCase();
+        const exact = all.filter((item) => item.text.toLowerCase() === search);
+        return exact.length ? exact : all.filter((item) => item.text.toLowerCase().includes(search));
+      };
+      // "Brot und Butter" may be one entry, "Milch, Brot und Eier" are three.
+      const names = [text, ...text.split(/\s*[,;]\s*|\s+und\s+/i).filter(Boolean)];
+      const parts = byName(text).length || names.length === 2 ? [text] : names.slice(1);
+      found = [];
+      for (const name of parts) {
+        const matches = byName(name);
+        if (!matches.length) return quiet ? null : `„${name.slice(0, 40)}“ steht auf keiner Liste.\n\n${overview(user)}`;
+        if (matches.length > 1) {
+          if (quiet) return null;
+          return `Welches meinst du mit „${name.slice(0, 40)}“?\n${matches.slice(0, 5).map((item) => `\`erledigt ${item.nr}\` ${item.text}`).join('\n')}`;
+        }
+        if (!found.includes(matches[0])) found.push(matches[0]);
       }
     }
 

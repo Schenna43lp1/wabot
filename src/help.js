@@ -10,12 +10,15 @@ function interval(ms) {
 export const HELP_TOPICS = {
   preise: 'prices', preis: 'prices', preistracker: 'prices', produkte: 'prices', tracker: 'prices',
   alltag: 'daily', erinnerungen: 'daily', erinnerung: 'daily', listen: 'daily', notizen: 'daily', briefing: 'daily', wetter: 'daily',
+  kalender: 'daily', geburtstage: 'daily',
+  geld: 'money', finanzen: 'money', ausgaben: 'money', haushaltsbuch: 'money', rechner: 'money', währung: 'money', waehrung: 'money',
 };
 
 /** topic: undefined (overview), 'prices' or 'daily' */
 export function helpText(config, topic) {
   if (topic === 'prices') return pricesHelp(config);
   if (topic === 'daily') return DAILY_HELP;
+  if (topic === 'money') return MONEY_HELP;
   return OVERVIEW;
 }
 
@@ -36,6 +39,16 @@ const OVERVIEW = `*Alltagshelfer – Hilfe*
 \`notiz WLAN Gäste: sonne123\` merken
 \`suche wlan\` wiederfinden
 
+📅 *Kalender und Geburtstage*
+\`kalender\` Google oder Outlook verbinden
+\`termine\` die nächsten 7 Tage
+\`geburtstag Anna 12.3.1990\`
+
+💸 *Geld*
+\`ausgabe 12,50 essen\` ins Haushaltsbuch
+\`ausgaben\` diesen Monat
+\`rechne 250 + 19%\` · \`100 usd in eur\`
+
 ☀️ *Briefing*
 \`ort Wien\` für das Wetter
 \`briefing 7\` jeden Morgen Wetter und Tagesplan
@@ -44,7 +57,7 @@ const OVERVIEW = `*Alltagshelfer – Hilfe*
 Schick mir einen Produktlink. Ich melde mich, wenn der Preis fällt.
 \`liste\` zeigt deine Produkte
 
-*Alle Befehle:* \`hilfe alltag\` · \`hilfe preise\``;
+*Alle Befehle:* \`hilfe alltag\` · \`hilfe geld\` · \`hilfe preise\``;
 
 const DAILY_HELP = `*Alltag – alle Befehle*
 
@@ -52,11 +65,15 @@ const DAILY_HELP = `*Alltag – alle Befehle*
 \`erinnere mich morgen 9 an Arzt\`
 \`erinnere mich in 2 stunden an Ofen\`
 \`erinnere mich am 24.12. an Geschenke\`
-\`erinnere mich heute abend an Wäsche\`
+\`erinnere mich heute halb 8 an Kino\`
+\`erinnere mich nächsten Freitag an Reifen\`
 \`erinnere mich werktags 7 an Tabletten\`
 \`erinnere mich jeden Montag 7 an Müll\`
+\`erinnere mich alle 2 Wochen am Donnerstag 6:30 an Papier\`
 \`erinnere mich monatlich am 1. an Miete\`
+_Ohne Zeit frage ich nach._
 \`erinnerungen\` alle mit Nummer
+\`erinnerung 2 morgen 10\` verschieben
 \`erinnerung weg 2\` löschen
 \`später\` die letzte Erinnerung in 10 Min. noch mal
 \`später 1h\` oder \`später morgen 9\`
@@ -68,7 +85,7 @@ _Erinnerungen kommen auch in der Ruhezeit._
 \`todo Steuer machen\` hinzufügen
 \`todo\` Liste zeigen
 \`erledigt 2\` oder \`erledigt 2 3\` abhaken
-\`erledigt Milch\` mit Namen abhaken
+\`erledigt Milch, Brot\` mit Namen abhaken
 \`einkauf leeren\` alles löschen
 
 📝 *Notizen*
@@ -77,6 +94,19 @@ _Erinnerungen kommen auch in der Ruhezeit._
 \`notiz 1\` ganz lesen
 \`suche wlan\` in Notizen, Listen und Erinnerungen
 \`notiz weg 1\` löschen
+
+📅 *Kalender (Google, Outlook)*
+\`kalender\` zeigt, wie du ihn verbindest (nur lesend)
+\`termine\` die nächsten 7 Tage mit Erinnerungen
+\`kalender erinnern 15\` 15 Min. vor jedem Termin Bescheid
+\`kalender erinnern aus\` nicht mehr
+\`kalender weg 1\` trennen
+
+🎂 *Geburtstage*
+\`geburtstag Anna 12.3.1990\` (Jahr freiwillig)
+\`geburtstage\` die nächsten
+\`geburtstag weg 1\` löschen
+_Ich sage 3 Tage vorher und am Tag um 9 Uhr Bescheid._
 
 ☀️ *Wetter und Briefing*
 \`ort Wien\` Ort für das Wetter speichern
@@ -88,7 +118,39 @@ _Erinnerungen kommen auch in der Ruhezeit._
 \`briefing aus\` nicht mehr schicken
 
 ↩️ \`rückgängig\` holt das zuletzt Gelöschte oder Abgehakte zurück.
-_Ort und Koordinaten gehen für das Wetter an Open-Meteo, sonst bleibt alles auf dem PC._`;
+_Ort und Koordinaten gehen für das Wetter an Open-Meteo, der Kalender wird nur bei Google oder Outlook abgerufen. Sonst bleibt alles auf dem PC._`;
+
+const MONEY_HELP = `*Geld – alle Befehle*
+
+💸 *Haushaltsbuch*
+\`ausgabe 12,50 essen\` eintragen
+\`ausgabe 12,50 essen Pizza mit Tom\` mit Notiz
+\`ausgabe 20 chf bahn\` andere Währung
+\`ausgaben\` diesen Monat nach Kategorien
+\`ausgaben oktober\` · \`ausgaben letzter monat\` · \`ausgaben 2026\`
+\`ausgaben essen\` nur eine Kategorie
+\`ausgabe weg 3\` löschen
+\`ausgaben export\` als Tabelle
+_Am 1. kommt der Rückblick auf den Vormonat._
+
+💰 *Budget*
+\`budget 800\` für den ganzen Monat
+\`budget essen 200\` für eine Kategorie
+\`budget\` Stand ansehen
+\`budget aus\` · \`budget essen aus\`
+_Ich warne bei 80 % und beim Überschreiten._
+
+🧮 *Rechner*
+\`rechne 12,5*3+7\`
+\`rechne 250 + 19%\` · \`rechne 19% von 250\`
+\`= 2^10\` geht auch
+\`trinkgeld 47,80\` · \`trinkgeld 47,80 10%\`
+
+💱 *Währungen*
+\`100 usd in eur\`
+\`umrechnen 50 chf\`
+\`kurs usd\`
+_Tageskurse der Europäischen Zentralbank._`;
 
 function pricesHelp({ intervalMs, minDropPercent, notifyIncrease }) {
   const drop = minDropPercent

@@ -152,11 +152,81 @@ test('deleting a reminder can be undone', async () => {
   assert.deepEqual(db.reminders(U).map((reminder) => reminder.text), ['Arzt', 'Müll']);
 });
 
+test('without a time the bot asks, and the next message can be the answer', async () => {
+  const { handle, db, clock } = withClock();
+  assert.match(await handle(U, 'erinnere mich an Milch'), /Wann soll ich dich an \*Milch\* erinnern\?/);
+  assert.match(await handle(U, 'heute 9'), /schon vorbei\. Wann dann\?/);
+  assert.match(await handle(U, 'Morgen halb 8!'), /morgen um 07:30 Uhr:\n\*Milch\*/);
+  // Answered, so a later time is no longer taken as an answer.
+  assert.notEqual(await handle(U, 'morgen 9'), null);
+  assert.equal(db.reminders(U).length, 1);
+
+  // Something else ends the question.
+  await handle(U, 'erinnere mich an Pakete');
+  assert.match(await handle(U, 'liste'), /beobachtest noch nichts/);
+  assert.doesNotMatch(await handle(U, 'morgen 9'), /Pakete/);
+
+  // And it expires.
+  await handle(U, 'erinnere mich an Reifen');
+  clock.now += 16 * 60_000;
+  assert.doesNotMatch(await handle(U, 'morgen 9'), /Reifen/);
+  assert.equal(db.reminders(U).length, 1);
+  assert.equal(await handle(OTHER, 'morgen 9'), 'Das habe ich nicht verstanden.\n\n• `erinnere mich morgen 9 an …`\n• `einkauf Milch`, `todo …`, `notiz …`\n• Schick einen *Produktlink* zum Beobachten\n• `hilfe` zeigt alle Befehle');
+});
+
 test('unclear reminders get an example', async () => {
   const { handle } = withClock();
-  assert.match(await handle(U, 'erinnere mich an Milch'), /keine Uhrzeit/);
+  assert.match(await handle(U, 'erinnere mich morgen 9'), /Woran soll ich dich erinnern/);
   assert.match(await handle(U, 'erinnere mich heute 9 an Milch'), /schon vorbei/);
-  assert.equal(await handle(U, 'erinnere mich an Milch', { quiet: true }), null);
+  // In the self-chat only "erinnere mich …" is clearly meant for the bot.
+  assert.equal(await handle(U, 'Erinnerung an Opa', { quiet: true }), null);
+  assert.match(await handle(U, 'erinnere mich an Milch', { quiet: true }), /Wann soll ich/);
+});
+
+test('a reminder can be moved, a recurring one only once or for good', async () => {
+  const { handle, db, clock, alerts } = withClock();
+  await handle(U, 'erinnere mich morgen 9 an Arzt');
+  await handle(U, 'erinnere mich jeden Montag 7 an Müll');
+  assert.match(await handle(U, 'erinnerung 1 morgen 10'), /Erinnerung 1 verschoben: \*Arzt\*\nJetzt morgen um 10:00 Uhr/);
+  assert.match(await handle(U, 'erinnerung verschieben 2 auf dienstag 7'), /Nächstes Mal morgen um 07:00 Uhr\.\n_Danach wieder jeden Montag um 07:00 Uhr\._/);
+  assert.match(await handle(U, 'erinnerung 9 morgen 10'), /Erinnerung 9 gibt es nicht/);
+
+  clock.now = local(2026, 10, 24, 7, 0);
+  queueReminders(db, clock.now);
+  assert.match(alerts()[0], /Müll[\s\S]*Nächstes Mal am Montag, 30\.11\. um 07:00 Uhr/);
+
+  assert.match(await handle(U, 'erinnerung 2 alle 2 wochen am montag 6'), /alle 2 Wochen am Montag um 06:00 Uhr, nächstes Mal am Montag, 30\.11\. um 06:00 Uhr/);
+});
+
+test('every two weeks, also across the change to winter time', async () => {
+  const { handle, db, clock, alerts } = withClock(local(2026, 9, 12, 12, 0));
+  assert.match(await handle(U, 'erinnere mich alle 2 Wochen donnerstags 6:30 an Papiermüll'), /alle 2 Wochen am Donnerstag um 06:30 Uhr, nächstes Mal am Donnerstag, 15\.10\./);
+  for (const day of [15, 29]) {
+    clock.now = local(2026, 9, day, 6, 30);
+    queueReminders(db, clock.now);
+  }
+  assert.equal(alerts().length, 2);
+  assert.equal(db.reminders(U)[0].due, local(2026, 10, 12, 6, 30));
+  assert.match(await handle(U, 'erinnerungen'), /Papiermüll 🔁 _alle 2 Wochen am Donnerstag_/);
+});
+
+test('spoken and short times', () => {
+  const sunday = local(2026, 10, 22, 12, 0);
+  assert.deepEqual(parseReminder('mich halb 8 an Kino', sunday), { text: 'Kino', due: local(2026, 10, 22, 19, 30) });
+  assert.deepEqual(parseReminder('mich um 3 an Anruf', sunday), { text: 'Anruf', due: local(2026, 10, 22, 15, 0) });
+  assert.deepEqual(parseReminder('mich um 10 an Anruf', sunday), { text: 'Anruf', due: local(2026, 10, 23, 10, 0) });
+  assert.deepEqual(parseReminder('mich morgen viertel nach 9 an X', sunday), { text: 'X', due: local(2026, 10, 23, 9, 15) });
+  assert.deepEqual(parseReminder('mich morgen dreiviertel acht an X', sunday), { text: 'X', due: local(2026, 10, 23, 7, 45) });
+  assert.deepEqual(parseReminder('mich morgen 9h an X', sunday), { text: 'X', due: local(2026, 10, 23, 9, 0) });
+  assert.deepEqual(parseReminder('mich am fr 14 an X', sunday), { text: 'X', due: local(2026, 10, 27, 14, 0) });
+  assert.deepEqual(parseReminder('mich nächsten Sonntag an Oma', sunday), { text: 'Oma', due: local(2026, 10, 29, 9, 0) });
+  assert.deepEqual(parseReminder('mich nächste Woche an Reifen', sunday), { text: 'Reifen', due: local(2026, 10, 23, 9, 0) });
+  assert.deepEqual(parseReminder('mich am Wochenende an Rasen', sunday), { text: 'Rasen', due: local(2026, 10, 28, 9, 0) });
+  assert.deepEqual(parseReminder('mich in 1 monat an Abo', local(2027, 0, 31, 12, 0)), { text: 'Abo', due: local(2027, 1, 28, 12, 0) });
+  assert.deepEqual(parseReminder('mich jeden mo 7 an Müll', sunday), { text: 'Müll', rule: { day: 1, minute: 420 } });
+  assert.deepEqual(parseReminder('mich alle 3 tage um 20 uhr an Pflanzen', sunday), { text: 'Pflanzen', rule: { every: 3, from: '2026-11-22', minute: 1200 } });
+  // "so" and "do" are only days after "am" or "jeden".
+  assert.equal(parseReminder('so ein Mist', sunday), null);
 });
 
 // Lists
@@ -187,8 +257,18 @@ test('shopping list: add, skip duplicates, tick off by number and name, undo', a
 test('ticking off a list completely is celebrated, ambiguous names are asked', async () => {
   const { handle } = withClock();
   await handle(U, 'todo Oma anrufen\nOpa anrufen');
-  assert.match(await handle(U, 'erledigt anrufen'), /Welches meinst du\?\n`erledigt 1` Oma anrufen\n`erledigt 2` Opa anrufen/);
+  assert.match(await handle(U, 'erledigt anrufen'), /Welches meinst du mit „anrufen“\?\n`erledigt 1` Oma anrufen\n`erledigt 2` Opa anrufen/);
   assert.match(await handle(U, 'erledigt 1, 2'), /To-do-Liste ist leer/);
+});
+
+test('several entries can be ticked off by name', async () => {
+  const { handle, db } = withClock();
+  await handle(U, 'einkauf Milch, Brot und Butter, Eier, Käse');
+  assert.match(await handle(U, 'erledigt brot und butter'), /Erledigt: Brot und Butter\n/);
+  assert.match(await handle(U, 'erledigt Milch, eier und käse'), /Erledigt: Milch, Eier, Käse\n🎉/);
+  await handle(U, 'einkauf Milch, Brot');
+  assert.match(await handle(U, 'erledigt Milch, Wurst'), /„Wurst“ steht auf keiner Liste/);
+  assert.equal(db.items(U).length, 2);
 });
 
 // Notes
@@ -256,7 +336,7 @@ test('the briefing collects the day', async () => {
   const text = await handle(U, 'briefing');
   assert.match(text, /Guten Morgen!\* Dienstag, 24\. November/);
   assert.match(text, /Wien:\* −1 bis 7 °C/);
-  assert.match(text, /Heute\*\n18:00 Sport/);
+  assert.match(text, /Heute\*\n⏰ 18:00 Sport/);
   assert.doesNotMatch(text, /Arzt/);
   assert.match(text, /To-dos\* \(1\)\n1\. Steuer/);
   assert.match(text, /Einkauf:\* Milch, Brot/);

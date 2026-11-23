@@ -14,7 +14,10 @@ const UNITS = {
   h: 'hour', std: 'hour', stunde: 'hour', stunden: 'hour',
   tag: 'day', tage: 'day', tagen: 'day',
   woche: 'week', wochen: 'week',
+  monat: 'month', monate: 'month', monaten: 'month',
 };
+// Only after "am", "jeden" or "nächsten": "so" and "do" are ordinary words too.
+const SHORT_DAYS = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 };
 // "heute abend", "morgen früh"
 const DAY_PARTS = {
   früh: 8 * 60, frueh: 8 * 60, morgens: 8 * 60, vormittag: 10 * 60, vormittags: 10 * 60, mittag: 12 * 60, mittags: 12 * 60,
@@ -23,10 +26,15 @@ const DAY_PARTS = {
 // Words between the time and the text: "morgen 9 an den Arzt"
 const FILLER = /^(?:an|ans|daran|dass|das|zu|:|-|–)$/i;
 const MAX_DAYS_AHEAD = 5 * 366;
+// Nobody means "um 3" at night: before 8 a time without a day may be the afternoon.
+const EARLY = 8 * 60;
 
 const word = (token) => token?.toLowerCase().replace(/[,!?;:]+$/, '');
 const bare = (token) => word(token)?.replace(/\.$/, '');
 const weekday = (token) => DAYS.indexOf(bare(token));
+const markedWeekday = (token) => (weekday(token) >= 0 ? weekday(token) : (SHORT_DAYS[bare(token)] ?? -1));
+const isEvery = (token) => /^jede[nrs]?$/.test(bare(token) ?? '');
+const isNext = (token) => /^(nächste[nr]?|naechste[nr]?|kommende[nr]?)$/.test(bare(token) ?? '');
 
 function amountOf(token) {
   const text = word(token);
@@ -36,15 +44,43 @@ function amountOf(token) {
   return null;
 }
 
-/** "9", "9:30", "9.30", "9uhr", followed by an optional "uhr". */
+function hourOf(token) {
+  const text = bare(token);
+  if (/^\d{1,2}$/.test(text ?? '')) return Number(text);
+  if (text === 'eins') return 1;
+  return NUMBERS[text] ?? null;
+}
+
+/** "halb 8" is 7:30, "viertel nach 8" 8:15, "viertel vor 8" and "dreiviertel 8" 7:45. */
+function readSpoken(tokens, i) {
+  const first = bare(tokens[i]);
+  let offset;
+  let pos = i + 1;
+  if (first === 'halb') offset = -30;
+  else if (first === 'dreiviertel') offset = -15;
+  else if (first === 'viertel' && ['nach', 'vor'].includes(bare(tokens[pos]))) {
+    offset = bare(tokens[pos]) === 'nach' ? 15 : -15;
+    pos++;
+  } else return null;
+  const hour = hourOf(tokens[pos]);
+  if (hour == null || hour < 1 || hour > 24) return null;
+  pos++;
+  if (bare(tokens[pos]) === 'uhr') pos++;
+  const minute = (hour * 60 + offset + DAY_MINUTES) % DAY_MINUTES;
+  return { minute, end: pos, ambiguous: minute >= 60 && minute < EARLY };
+}
+
+/** "9", "9:30", "9.30", "9uhr", "9h", "halb 8", followed by an optional "uhr". */
 function readClock(tokens, i, { needsMark }) {
   let at = i;
   const marked = bare(tokens[at]) === 'um';
   if (marked) at++;
+  const spoken = readSpoken(tokens, at);
+  if (spoken) return spoken;
   const raw = word(tokens[at]);
   if (!raw) return null;
-  const withUhr = raw.endsWith('uhr');
-  const minute = parseClock(raw.replace(/uhr$/, ''));
+  const withUhr = /\d(uhr|h)$/.test(raw);
+  const minute = parseClock(raw.replace(/(uhr|h)$/, ''));
   if (minute == null) return null;
   at++;
   let hasUhr = withUhr;
@@ -54,7 +90,8 @@ function readClock(tokens, i, { needsMark }) {
   }
   // "3 Brote" is not a time. "um 3", "3 uhr" and "3:00" are.
   if (needsMark && !marked && !hasUhr && !/[:.]/.test(raw)) return null;
-  return { minute, end: at };
+  // "um 3" in the afternoon means 15:00.
+  return { minute, end: at, ambiguous: minute >= 60 && minute < EARLY };
 }
 
 /** A clock time or "abends". */
@@ -85,15 +122,24 @@ function readDay(tokens, i, now) {
   const today = new Date(now);
   const offset = (days) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + days);
   const first = bare(tokens[i]);
-  if (first === 'heute') return { date: offset(0), end: i + 1, explicit: true };
-  if (first === 'morgen') return { date: offset(1), end: i + 1, explicit: true };
-  if (first === 'übermorgen' || first === 'uebermorgen') return { date: offset(2), end: i + 1, explicit: true };
+  if (first === 'heute') return { date: offset(0), end: i + 1, today: true };
+  if (first === 'morgen') return { date: offset(1), end: i + 1 };
+  if (first === 'übermorgen' || first === 'uebermorgen') return { date: offset(2), end: i + 1 };
 
-  const at = first === 'am' ? i + 1 : i;
-  const day = weekday(tokens[at]);
+  const until = (day) => (day - today.getDay() + 7) % 7;
+  // "nächsten Montag" is never today, "nächste Woche" is the coming Monday.
+  if (isNext(tokens[i])) {
+    if (bare(tokens[i + 1]) === 'woche') return { date: offset(until(1) || 7), end: i + 2 };
+    const day = markedWeekday(tokens[i + 1]);
+    return day >= 0 ? { date: offset(until(day) || 7), end: i + 2 } : null;
+  }
+  const marked = first === 'am';
+  const at = marked ? i + 1 : i;
+  if (bare(tokens[at]) === 'wochenende') return { date: offset(until(6)), end: at + 1, weekday: true };
+  const day = marked ? markedWeekday(tokens[at]) : weekday(tokens[at]);
   if (day >= 0) {
     // The next one, today included: the time decides whether it has passed.
-    return { date: offset((day - today.getDay() + 7) % 7), end: at + 1, weekday: true };
+    return { date: offset(until(day)), end: at + 1, weekday: true };
   }
   return readDate(tokens, i, now);
 }
@@ -131,14 +177,53 @@ function readRelative(tokens, i, now) {
   }
   if (!Number.isInteger(amount)) return null;
   const today = new Date(now);
-  const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + amount * (unit === 'week' ? 7 : 1));
+  const date = unit === 'month'
+    ? addMonths(today, amount)
+    : new Date(today.getFullYear(), today.getMonth(), today.getDate() + amount * (unit === 'week' ? 7 : 1));
   const time = readTimeOfDay(tokens, pos, { needsMark: false });
   const minute = time?.minute ?? today.getHours() * 60 + today.getMinutes();
   return { due: at(date, minute), end: time?.end ?? pos };
 }
 
+/** "31. Januar + 1 Monat" is the last day of February, not 3 March. */
+function addMonths(date, months) {
+  const last = new Date(date.getFullYear(), date.getMonth() + months + 1, 0).getDate();
+  return new Date(date.getFullYear(), date.getMonth() + months, Math.min(date.getDate(), last));
+}
+
+const dateKey = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+function fromKey(key) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/** "alle 2 wochen am montag 7", "alle 3 tage", "alle 14 tage" */
+function readInterval(tokens, i, now) {
+  if (bare(tokens[i]) !== 'alle') return null;
+  const amount = amountOf(tokens[i + 1]);
+  const unit = UNITS[bare(tokens[i + 2])];
+  if (!Number.isInteger(amount) || amount < 1 || amount > 52 || (unit !== 'day' && unit !== 'week')) return null;
+  let pos = i + 3;
+  const today = new Date(now);
+  let start = today;
+  const marked = bare(tokens[pos]) === 'am';
+  if (marked) pos++;
+  let day = markedWeekday(tokens[pos]);
+  if (day < 0 && bare(tokens[pos])?.endsWith('s')) day = DAYS.indexOf(bare(tokens[pos]).slice(0, -1));
+  if (day >= 0) {
+    start = new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((day - today.getDay() + 7) % 7));
+    pos++;
+  } else if (marked) return null;
+  const time = readTimeOfDay(tokens, pos, { needsMark: false });
+  const rule = { every: amount * (unit === 'week' ? 7 : 1), from: dateKey(start), minute: time?.minute ?? DEFAULT_MINUTE };
+  return { rule, end: time?.end ?? pos };
+}
+
 /** "täglich 8", "werktags", "jeden montag um 7", "montags", "monatlich am 1." */
 function readRule(tokens, i, now) {
+  const interval = readInterval(tokens, i, now);
+  if (interval) return interval;
   let pos = i;
   let rule;
   const first = bare(tokens[pos]);
@@ -155,8 +240,8 @@ function readRule(tokens, i, now) {
   } else if (/^jede[nr]?$/.test(first ?? '') && second === 'tag') {
     rule = { day: DAILY };
     pos += 2;
-  } else if (/^jede[nr]?$/.test(first ?? '') && weekday(tokens[pos + 1]) >= 0) {
-    rule = { day: weekday(tokens[pos + 1]) };
+  } else if (isEvery(tokens[pos]) && markedWeekday(tokens[pos + 1]) >= 0) {
+    rule = { day: markedWeekday(tokens[pos + 1]) };
     pos += 2;
   } else if (first?.endsWith('s') && DAYS.includes(first.slice(0, -1))) {
     rule = { day: DAYS.indexOf(first.slice(0, -1)) };
@@ -191,6 +276,8 @@ function readWhen(tokens, i, now) {
   if (day) {
     const time = readTimeOfDay(tokens, day.end, { needsMark: false });
     let due = at(day.date, time?.minute ?? DEFAULT_MINUTE);
+    // "heute halb 8" at noon means the evening.
+    if (day.today && time?.ambiguous && due <= now) due = at(day.date, time.minute + 12 * 60);
     const end = time?.end ?? day.end;
     // "montag 8" on a Monday at 9 means next week.
     if (due <= now && day.weekday) due = at(new Date(day.date.getFullYear(), day.date.getMonth(), day.date.getDate() + 7), time?.minute ?? DEFAULT_MINUTE);
@@ -209,6 +296,7 @@ function readWhen(tokens, i, now) {
   }
   const today = new Date(now);
   let due = at(today, time.minute);
+  if (due <= now && time.ambiguous && at(today, time.minute + 12 * 60) > now) due = at(today, time.minute + 12 * 60);
   if (due <= now) due = at(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1), time.minute);
   return { due, end: time.end };
 }
@@ -251,18 +339,42 @@ export function parseReminder(input, now) {
   return found.rule ? { text, rule: found.rule } : { text, due: found.due };
 }
 
-/** "30 min", "morgen 9", "" (10 minutes). For "später". */
+/** A message that is only a time: "morgen 9", "jeden Montag 7". Returns { due }, { rule }, { error } or null. */
+export function parseWhen(input, now) {
+  const tokens = input.trim().replace(/!+$/, '').split(/\s+/).filter(Boolean);
+  if (!tokens.length) return null;
+  const found = readWhen(tokens, 0, now);
+  if (!found || found.end !== tokens.length) return null;
+  if (found.error) return { error: found.error };
+  return found.rule ? { rule: found.rule } : { due: found.due };
+}
+
+/** "30 min", "1h", "morgen 9", "" (10 minutes). For "später". */
 export function parseLater(input, now) {
   const text = input.trim();
   if (!text) return { due: now + 10 * MINUTE };
-  const tokens = (/^\d/.test(text) || /^(eine?[nr]?|halbe)\b/i.test(text) ? `in ${text}` : text).split(/\s+/);
-  const found = readWhen(tokens, 0, now);
-  if (!found || found.end !== tokens.length || found.rule) return null;
-  return found.error ? { error: found.error } : { due: found.due };
+  const relative = /^\d/.test(text) || /^(eine?[nr]?|halbe)\b/i.test(text);
+  const found = parseWhen(relative ? `in ${text}` : text, now);
+  return found?.rule ? null : found;
+}
+
+/** The text of "erinnere mich an den Arzt" without the filler words. */
+export function reminderText(input) {
+  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  if (/^(mich|uns)$/i.test(tokens[0] ?? '')) tokens.shift();
+  return cleanText(tokens);
 }
 
 /** The first time of the rule after `after`. */
 export function nextTime(rule, after) {
+  if (rule.every) {
+    const start = fromKey(rule.from);
+    const days = Math.round((startOfDay(new Date(after)) - start.getTime()) / 86_400_000);
+    for (let k = Math.max(0, Math.floor(days / rule.every)); ; k++) {
+      const next = at(new Date(start.getFullYear(), start.getMonth(), start.getDate() + k * rule.every), rule.minute);
+      if (next > after) return next;
+    }
+  }
   if (rule.monthDay == null) return nextReport(rule, after);
   const start = new Date(after);
   for (let offset = 0; offset <= 12; offset++) {
@@ -276,6 +388,13 @@ export function nextTime(rule, after) {
 }
 
 export function ruleText(rule) {
+  if (rule.every) {
+    const clock = `um ${clockText(rule.minute)} Uhr`;
+    if (rule.every % 7) return `alle ${rule.every} Tage ${clock}`;
+    const weeks = rule.every / 7;
+    const day = capitalize(DAYS[fromKey(rule.from).getDay()]);
+    return `${weeks === 1 ? 'jede Woche' : `alle ${weeks} Wochen`} am ${day} ${clock}`;
+  }
   if (rule.monthDay == null) return reportText(rule);
   return `monatlich am ${rule.monthDay}. um ${clockText(rule.minute)} Uhr`;
 }

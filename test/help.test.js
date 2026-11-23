@@ -8,7 +8,7 @@ import { setup } from './helpers.js';
 
 const USER = '491701234567';
 const help = (env = {}, topic) => helpText(readConfig(env), topic);
-const TOPICS = [undefined, 'prices', 'daily'];
+const TOPICS = [undefined, 'prices', 'daily', 'money'];
 
 /** Something of everything, so that every example has a number to work on. */
 async function fixture() {
@@ -19,6 +19,8 @@ async function fixture() {
   await t.handle(USER, 'todo Steuer');
   await t.handle(USER, 'notiz WLAN Gäste: sonne123');
   await t.handle(USER, 'ort Wien');
+  for (const text of ['ausgabe 10 essen', 'ausgabe 5 kaffee', 'ausgabe 20 tanken', 'geburtstag Anna 12.3.1990']) await t.handle(USER, text);
+  await t.handle(USER, 'kalender https://calendar.google.com/calendar/ical/secret/basic.ics');
   await t.handle(USER, 'erinnere mich morgen 9 an Arzt');
   await t.handle(USER, 'erinnere mich übermorgen 9 an Paket');
   // A reminder that just fired, for "später"
