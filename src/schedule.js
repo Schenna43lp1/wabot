@@ -1,10 +1,11 @@
 // Quiet hours and report times, always in the local time of the PC.
-const DAYS = ['sonntag', 'montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag'];
+export const DAYS = ['sonntag', 'montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag'];
 const DAY_MINUTES = 24 * 60;
 export const DAILY = 7;
+export const WORKDAYS = 8;
 const DEFAULT_TIME = 8 * 60;
 
-function parseClock(input) {
+export function parseClock(input) {
   const match = input.trim().match(/^(\d{1,2})(?:[:.](\d\d))?(?:\s*uhr)?$/i);
   if (!match) return null;
   const hours = Number(match[1]);
@@ -34,11 +35,12 @@ export function isQuiet(settings, at) {
   return from < to ? minute >= from && minute < to : minute >= from || minute < to;
 }
 
-/** "täglich 8", "sonntag 18:30", "wöchentlich" (Monday) */
+/** "täglich 8", "werktags 7", "sonntag 18:30", "wöchentlich" (Monday) */
 export function parseReport(input) {
   const [word, ...rest] = input.trim().toLowerCase().split(/\s+/);
   let day;
   if (word === 'täglich' || word === 'taeglich') day = DAILY;
+  else if (word === 'werktags' || word === 'wochentags') day = WORKDAYS;
   else if (word === 'wöchentlich' || word === 'woechentlich') day = 1;
   else {
     day = DAYS.findIndex((name) => word === name || word === `${name}s`);
@@ -50,7 +52,9 @@ export function parseReport(input) {
 }
 
 export function reportText({ day, minute }) {
-  const when = day === DAILY ? 'täglich' : `jeden ${DAYS[day][0].toUpperCase()}${DAYS[day].slice(1)}`;
+  let when = `jeden ${capitalize(DAYS[day] ?? '')}`;
+  if (day === DAILY) when = 'täglich';
+  if (day === WORKDAYS) when = 'werktags';
   return `${when} um ${clockText(minute)} Uhr`;
 }
 
@@ -60,7 +64,11 @@ export function nextReport({ day, minute }, after) {
   for (let offset = 0; offset <= 8; offset++) {
     const time = minute % DAY_MINUTES;
     const next = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset, Math.floor(time / 60), time % 60);
-    if (next.getTime() > after && (day === DAILY || next.getDay() === day)) return next.getTime();
+    const weekday = next.getDay();
+    const matches = day === DAILY || (day === WORKDAYS ? weekday >= 1 && weekday <= 5 : weekday === day);
+    if (next.getTime() > after && matches) return next.getTime();
   }
   throw new Error(`No report time for day ${day}`);
 }
+
+export const capitalize = (word) => word.charAt(0).toUpperCase() + word.slice(1);

@@ -49,7 +49,13 @@ export function openDatabase(file) {
       quiet_to      INTEGER,
       report_day    INTEGER,
       report_minute INTEGER,
-      report_next   INTEGER
+      report_next   INTEGER,
+      briefing_day    INTEGER,
+      briefing_minute INTEGER,
+      briefing_next   INTEGER,
+      place           TEXT,
+      lat             REAL,
+      lon             REAL
     );
     CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT);
     CREATE TABLE IF NOT EXISTS trash (user TEXT PRIMARY KEY, body TEXT NOT NULL);
@@ -64,6 +70,32 @@ export function openDatabase(file) {
       at       INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+    -- nr is what the user types. It is per user, so the numbers stay small.
+    CREATE TABLE IF NOT EXISTS reminders (
+      id       INTEGER PRIMARY KEY,
+      user     TEXT NOT NULL,
+      nr       INTEGER NOT NULL,
+      text     TEXT NOT NULL,
+      due      INTEGER,
+      repeat   TEXT,
+      fired_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS reminders_due ON reminders(due);
+    CREATE TABLE IF NOT EXISTS items (
+      id   INTEGER PRIMARY KEY,
+      user TEXT NOT NULL,
+      list TEXT NOT NULL,
+      nr   INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      at   INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS notes (
+      id   INTEGER PRIMARY KEY,
+      user TEXT NOT NULL,
+      nr   INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      at   INTEGER NOT NULL
+    );
   `);
   addMissingColumns(db);
   db.prepare("INSERT OR IGNORE INTO meta VALUES ('installed_at', ?)").run(Date.now());
@@ -153,6 +185,64 @@ export function openDatabase(file) {
       run(`UPDATE settings SET ${keys.map((key) => `${key} = ?`).join(', ')} WHERE user = ?`, ...Object.values(fields), user);
     },
     dueReports: (now) => all('SELECT * FROM settings WHERE report_next <= ?', now),
+    dueBriefings: (now) => all('SELECT * FROM settings WHERE briefing_next <= ?', now),
+
+    // Reminders. due is null once a one-off reminder has fired; it stays a while for "später".
+    reminders: (user) => all('SELECT * FROM reminders WHERE user = ? AND due IS NOT NULL ORDER BY due, nr', user),
+    reminder: (user, nr) => get('SELECT * FROM reminders WHERE user = ? AND nr = ? AND due IS NOT NULL', user, nr),
+    addReminder(user, { text, due, repeat }) {
+      const nr = (get('SELECT MAX(nr) AS nr FROM reminders WHERE user = ? AND due IS NOT NULL', user).nr ?? 0) + 1;
+      run('INSERT INTO reminders (user, nr, text, due, repeat) VALUES (?, ?, ?, ?, ?)', user, nr, text, due, repeat ? JSON.stringify(repeat) : null);
+      return store.reminder(user, nr);
+    },
+    updateReminder(id, fields) {
+      const keys = Object.keys(fields);
+      run(`UPDATE reminders SET ${keys.map((key) => `${key} = ?`).join(', ')} WHERE id = ?`, ...Object.values(fields), id);
+    },
+    removeReminder: (id) => run('DELETE FROM reminders WHERE id = ?', id),
+    dueReminders: (now) => all('SELECT * FROM reminders WHERE due <= ? ORDER BY due', now),
+    lastFired: (user, since) =>
+      get('SELECT * FROM reminders WHERE user = ? AND fired_at >= ? ORDER BY fired_at DESC, id DESC LIMIT 1', user, since),
+    pruneReminders: (before) => run('DELETE FROM reminders WHERE due IS NULL AND fired_at < ?', before),
+
+    // Shopping list and to-dos share the numbers, so "erledigt 3" is never ambiguous.
+    items: (user, list) => (list
+      ? all('SELECT * FROM items WHERE user = ? AND list = ? ORDER BY nr', user, list)
+      : all('SELECT * FROM items WHERE user = ? ORDER BY nr', user)),
+    addItems(user, list, texts, at) {
+      store.transaction(() => {
+        let nr = get('SELECT MAX(nr) AS nr FROM items WHERE user = ?', user).nr ?? 0;
+        for (const text of texts) run('INSERT INTO items (user, list, nr, text, at) VALUES (?, ?, ?, ?, ?)', user, list, ++nr, text, at);
+      });
+    },
+    removeItems: (ids) => store.transaction(() => ids.forEach((id) => run('DELETE FROM items WHERE id = ?', id))),
+    restoreItems(rows) {
+      store.transaction(() => {
+        for (const row of rows) {
+          const taken = get('SELECT 1 FROM items WHERE user = ? AND nr = ?', row.user, row.nr);
+          const nr = taken ? (get('SELECT MAX(nr) AS nr FROM items WHERE user = ?', row.user).nr ?? 0) + 1 : row.nr;
+          run('INSERT INTO items (user, list, nr, text, at) VALUES (?, ?, ?, ?, ?)', row.user, row.list, nr, row.text, row.at);
+        }
+      });
+    },
+
+    notes: (user) => all('SELECT * FROM notes WHERE user = ? ORDER BY nr DESC', user),
+    note: (user, nr) => get('SELECT * FROM notes WHERE user = ? AND nr = ?', user, nr),
+    addNote(user, text, at) {
+      const nr = (get('SELECT MAX(nr) AS nr FROM notes WHERE user = ?', user).nr ?? 0) + 1;
+      run('INSERT INTO notes (user, nr, text, at) VALUES (?, ?, ?, ?)', user, nr, text, at);
+      return store.note(user, nr);
+    },
+    removeNote: (id) => run('DELETE FROM notes WHERE id = ?', id),
+    restoreNote(row) {
+      const taken = store.note(row.user, row.nr);
+      const nr = taken ? (get('SELECT MAX(nr) AS nr FROM notes WHERE user = ?', row.user).nr ?? 0) + 1 : row.nr;
+      run('INSERT INTO notes (user, nr, text, at) VALUES (?, ?, ?, ?)', row.user, nr, row.text, row.at);
+      return store.note(row.user, nr);
+    },
+    /** For "rückgängig": the last deleted thing of each user, of any kind. */
+    keepInTrash: (user, body) => run('INSERT OR REPLACE INTO trash VALUES (?, ?)', user, JSON.stringify(body)),
+    clearTrash: (user) => run('DELETE FROM trash WHERE user = ?', user),
 
     // urgent = an answer to the user, which quiet hours must not hold back.
     queue: (user, text, { at = Date.now(), urgent = false } = {}) =>
@@ -174,6 +264,7 @@ function addMissingColumns(db) {
   const wanted = {
     products: { name: 'TEXT', paused: 'INTEGER NOT NULL DEFAULT 0', min_drop: 'REAL' },
     outbox: { at: 'INTEGER NOT NULL DEFAULT 0', urgent: 'INTEGER NOT NULL DEFAULT 0' },
+    settings: { briefing_day: 'INTEGER', briefing_minute: 'INTEGER', briefing_next: 'INTEGER', place: 'TEXT', lat: 'REAL', lon: 'REAL' },
   };
   for (const [table, columns] of Object.entries(wanted)) {
     const present = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));

@@ -23,15 +23,31 @@ const WORDS = {
   purchase: ['gekauft', 'bestellt'],
   savings: ['ersparnis', 'gespart', 'bilanz'],
   chart: ['diagramm', 'grafik', 'chart'],
+  // Everyday helper
+  remind: ['erinnere', 'erinner', 'erinnern', 'erinnerung', 'remind'],
+  reminders: ['erinnerungen', 'termine'],
+  snooze: ['später', 'spaeter', 'snooze'],
+  shopping: ['einkauf', 'einkaufen', 'einkaufsliste'],
+  todo: ['todo', 'todos', 'to-do', 'to-dos', 'aufgabe', 'aufgaben'],
+  done: ['erledigt', 'done', 'abhaken', 'abgehakt'],
+  note: ['notiz', 'notiere', 'notieren', 'merke', 'merk'],
+  notes: ['notizen'],
+  search: ['suche', 'such', 'suchen'],
+  weather: ['wetter'],
+  place: ['ort', 'wohnort', 'standort'],
+  briefing: ['briefing', 'tagesbriefing', 'morgenbriefing', 'tagesplan'],
 };
 const ACTIONS = new Map(Object.entries(WORDS).flatMap(([action, words]) => words.map((word) => [word, action])));
 const NEEDS_PRODUCT = new Set(['show', 'check', 'target', 'history', 'remove', 'selector', 'pause', 'resume', 'rename', 'threshold', 'purchase', 'chart']);
 const TAKES_ALL = new Set(['pause', 'resume']);
 const TAKES_SETTING = new Set(['quietHours', 'report']);
 const NEEDS_VALUE = new Set(['selector', 'rename', 'threshold']);
+// These take free text, links included: "notiz Rezept https://…" is a note, not a product.
+export const FREE_TEXT = new Set(['remind', 'reminders', 'snooze', 'shopping', 'todo', 'done', 'note', 'notes', 'search', 'weather', 'place', 'briefing', 'help']);
 
 // Only these are suggested for typos.
-const SUGGESTED = ['hilfe', 'liste', 'rückgängig', 'zeige', 'prüfen', 'ziel', 'verlauf', 'löschen', 'selektor', 'pause', 'schwelle', 'übersicht', 'export', 'gekauft', 'ersparnis', 'diagramm'];
+const SUGGESTED = ['hilfe', 'liste', 'rückgängig', 'zeige', 'prüfen', 'ziel', 'verlauf', 'löschen', 'selektor', 'pause', 'schwelle', 'übersicht', 'export', 'gekauft', 'ersparnis', 'diagramm',
+  'erinnerungen', 'einkauf', 'erledigt', 'notiz', 'notizen', 'wetter', 'briefing'];
 
 const LINK = /https?:\/\/[^\s<>]+/gi;
 // "3", "#3", "3.", "3:", "nr. 3", "nummer 3"
@@ -78,6 +94,8 @@ export function parseInput(input) {
   const first = text.split(/\s+/)[0];
   const action = actionOf(first.replace(/[!?.,:]+$/, ''));
   const rest = text.slice(first.length).trim();
+
+  if (FREE_TEXT.has(action)) return { action, value: rest.replace(/^[:\-–]\s*/, '') };
 
   if (action && TAKES_ALL.has(action) && /^alle[s]?[.!]?$/i.test(rest)) {
     return { action, ref: { all: true }, value: '' };

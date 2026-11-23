@@ -3,10 +3,9 @@ import { formatMoney } from './money.js';
 import { clockText, DAILY, isQuiet, nextReport, reportText } from './schedule.js';
 import { currentSeries, priceAt } from './stats.js';
 
-export function overview(db, user, now = Date.now(), days = 7) {
+/** What changed for the user's products, grouped. */
+export function priceChanges(db, user, now, days) {
   const products = db.products(user);
-  if (!products.length) return null;
-
   const groups = { reached: [], cheaper: [], dearer: [], failed: [] };
   let paused = 0;
   for (const product of products) {
@@ -29,6 +28,12 @@ export function overview(db, user, now = Date.now(), days = 7) {
     const line = `${name}: ${formatMoney(before, product.currency)} → *${formatMoney(product.price, product.currency)}* (${percent} %)`;
     groups[product.price < before ? 'cheaper' : 'dearer'].push(line);
   }
+  return { products, paused, groups };
+}
+
+export function overview(db, user, now = Date.now(), days = 7) {
+  const { products, paused, groups } = priceChanges(db, user, now, days);
+  if (!products.length) return null;
 
   const period = days === 1 ? 'letzte 24 Stunden' : `letzte ${days} Tage`;
   const count = `${products.length} ${products.length === 1 ? 'Produkt' : 'Produkte'}${paused ? `, ${paused} pausiert` : ''}`;

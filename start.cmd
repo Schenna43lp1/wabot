@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title WhatsApp-Preistracker
+title WhatsApp-Alltagshelfer
 cd /d "%~dp0"
 rem The QR code needs about 36 lines. Must run before chcp, as PowerShell 5 changes the font under UTF-8.
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"

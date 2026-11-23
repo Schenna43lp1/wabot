@@ -1,14 +1,18 @@
+import { createBriefing } from './briefing.js';
 import { UserError } from './errors.js';
 import { validateUrl } from './fetch-page.js';
 import { priceChart, HEIGHT, WIDTH } from './chart.js';
 import { exportCsv } from './export.js';
-import { helpText } from './help.js';
+import { HELP_TOPICS, helpText } from './help.js';
 import { actionOf, parseInput, parseTarget, suggest } from './input.js';
+import { createLists } from './lists.js';
 import { advice, details, listEntry, priceText, productName, targetText } from './messages.js';
 import { formatMoney } from './money.js';
 import { createOptions } from './options.js';
 import { createPurchases } from './purchases.js';
+import { createReminders } from './reminders.js';
 import { currentSeries, periodStats, sparkline } from './stats.js';
+import { createWeather } from './weather.js';
 
 const TRACKING_PARAMS = /^(utm_\w+|gclid|gbraid|wbraid|fbclid|msclkid|igshid|mc_cid|mc_eid)$/i;
 const MAX_LINKS = 5;
@@ -31,13 +35,15 @@ const TAKES_VALUE = new Set(['target', 'selector', 'rename', 'threshold', 'purch
 // Everyday words: in the self-chat they need a valid number to count as a command.
 const EVERYDAY_WORDS = new Set(['pause', 'resume', 'rename', 'threshold', 'purchase', 'chart']);
 
-const WELCOME = `👋 *Hallo, ich bin dein Preistracker.*
+const WELCOME = `👋 *Hallo, ich bin dein Alltagshelfer.*
 
-1. Öffne ein Produkt im Shop.
-2. Tippe auf „Teilen“ und schick es mir.
-3. Ich melde mich, wenn der Preis fällt.
+⏰ \`erinnere mich morgen 9 an Arzt\`
+🛒 \`einkauf Milch, Brot\`
+📝 \`notiz WLAN Gäste: sonne123\`
+☀️ \`briefing 7\` jeden Morgen Wetter und Tagesplan
+💶 Schick mir einen Produktlink, ich melde mich, wenn der Preis fällt.
 
-\`liste\` zeigt deine Produkte, \`hilfe\` alle Befehle.`;
+\`hilfe\` zeigt alle Befehle.`;
 
 const EMPTY = 'Du beobachtest noch nichts. Schick mir einfach einen Produktlink, am schnellsten über „Teilen“ im Shop.';
 const NEEDS_PRICE = 'Ein Ziel in Prozent geht erst, wenn ein Preis da ist.';
@@ -51,9 +57,12 @@ function normalize(link) {
   return url.href;
 }
 
-export function createCommands({ db, tracker, config, now = Date.now }) {
+export function createCommands({ db, tracker, config, weather = createWeather(), now = Date.now }) {
   const options = createOptions({ db, config, empty: EMPTY, now });
   const purchases = createPurchases({ db, config, now });
+  const reminders = createReminders({ db, now });
+  const lists = createLists({ db, now });
+  const briefing = createBriefing({ db, weather, reminders, lists, now });
   function yourProducts(user) {
     const products = db.products(user);
     if (!products.length) return EMPTY;
@@ -301,7 +310,13 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
 
   function undo(user) {
     const deleted = db.trashed(user);
-    if (!deleted) return 'Es gibt nichts wiederherzustellen. Zurückholen kann ich nur das zuletzt gelöschte Produkt.';
+    if (!deleted) return 'Es gibt nichts wiederherzustellen. Zurückholen kann ich nur das, was du zuletzt gelöscht oder abgehakt hast.';
+    if (deleted.kind) {
+      db.clearTrash(user);
+      if (deleted.kind === 'items') return lists.restoreItems(user, deleted);
+      if (deleted.kind === 'note') return lists.restoreNote(user, deleted);
+      return reminders.restore(user, deleted);
+    }
     const same = db.byUrl(user, deleted.product.url);
     if (same) return `Dieses Produkt beobachtest du schon wieder als Nr. ${same.id}.`;
     if (db.products(user).length >= config.maxProducts) return 'Deine Liste ist voll, ich kann es nicht zurückholen.';
@@ -320,8 +335,9 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
     const guess = suggest(text);
     if (guess) return `Meintest du \`${guess}\`?`;
     return 'Das habe ich nicht verstanden.\n\n' +
+      '• `erinnere mich morgen 9 an …`\n' +
+      '• `einkauf Milch`, `todo …`, `notiz …`\n' +
       '• Schick einen *Produktlink* zum Beobachten\n' +
-      '• `liste` zeigt deine Produkte\n' +
       '• `hilfe` zeigt alle Befehle';
   }
 
@@ -334,11 +350,21 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
     return `Meinst du das? Dann schick:\n${lines.join('\n')}`;
   }
 
+  /** "hilfe", "hilfe preise", "hilfe alltag" */
+  function help(value = '', quiet = false, text = '') {
+    if (quiet && text.trim() === '?') return null;
+    const topic = value.toLowerCase().replace(/[!?.]+$/, '');
+    if (!topic) return helpText(config);
+    const found = HELP_TOPICS[topic];
+    if (found) return helpText(config, found);
+    return quiet ? null : helpText(config);
+  }
+
   /**
    * Returns the reply (text, { text, file } or { text, image }), or null for ordinary notes in the self-chat.
    * quiet = self-chat: only answer what is clearly meant for the bot.
    */
-  return async function handle(user, text, { quiet = false } = {}) {
+  async function handle(user, text, { quiet = false } = {}) {
     const input = parseInput(text);
     if (!input) return quiet ? null : unknown(user, text);
     const { action, ref, value } = input;
@@ -346,7 +372,19 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
     try {
       switch (action) {
         case 'add': return await addAll(user, input.links);
-        case 'help': return quiet && text.trim() === '?' ? null : helpText(config);
+        case 'help': return help(value, quiet, text);
+        case 'remind': return reminders.add(user, value, quiet);
+        case 'reminders': return reminders.list(user);
+        case 'snooze': return reminders.snooze(user, value, quiet);
+        case 'shopping': return lists.shopping(user, value, quiet);
+        case 'todo': return lists.todo(user, value, quiet);
+        case 'done': return lists.done(user, value, quiet);
+        case 'note': return lists.note(user, value, quiet);
+        case 'notes': return lists.notes(user);
+        case 'search': return lists.search(user, value, quiet, db.reminders(user));
+        case 'weather': return await briefing.weather(user, value, quiet);
+        case 'place': return await briefing.place(user, value, quiet);
+        case 'briefing': return await briefing.briefing(user, value, quiet);
         case 'hello': return quiet ? null : WELCOME;
         case 'thanks': return quiet ? null : 'Gern! 👍';
         case 'list': return list(user);
@@ -389,5 +427,8 @@ export function createCommands({ db, tracker, config, now = Date.now }) {
       if (error instanceof UserError) return error.message;
       throw error;
     }
-  };
+  }
+  // For the scheduled briefing in index.js
+  handle.composeBriefing = briefing.compose;
+  return handle;
 }
