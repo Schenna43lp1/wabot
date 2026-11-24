@@ -110,6 +110,8 @@ export function createBriefing({ db, weather, calendar, birthdays, lists, now = 
       db.saveSettings(user, { place: null, lat: null, lon: null });
       return '📍 Ort entfernt. Das Briefing kommt ohne Wetter.';
     }
+    // "Ort: Café Central um 8" in the self-chat is a note and must not go to Open-Meteo.
+    if (quiet && (/\d/.test(value) || value.trim().split(/\s+/).length > 3)) return null;
     const found = await lookUp(value, quiet);
     if (!found) return quiet ? null : `„${value.slice(0, 40)}“ habe ich nicht gefunden. Versuch es mit dem Namen der Stadt, z. B. \`ort München\`.`;
     db.saveSettings(user, { place: found.place, lat: found.lat, lon: found.lon });
@@ -124,6 +126,10 @@ export function createBriefing({ db, weather, calendar, birthdays, lists, now = 
 
   async function weatherNow(user, value, quiet) {
     let where = db.settings(user);
+    // "wetter morgen", "wetter in Graz": the forecast always covers today and tomorrow.
+    value = value.trim().replace(/[!?.]+$/, '')
+      .replace(/(?:^|\s+)(?:heute|morgen|jetzt|gerade|aktuell|am wochenende)(?=\s|$)/gi, '')
+      .replace(/^(?:in|für|fuer)\s+/i, '').trim();
     if (value) {
       // "Wetter war schön" in the self-chat is a note and must not leave the PC.
       if (quiet) return null;

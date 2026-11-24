@@ -41,6 +41,23 @@ const addDays = (ms, days) => {
   const date = new Date(ms);
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days).getTime();
 };
+/** "heute", "morgen", "übermorgen", "woche", "nächste woche", "wochenende" as days from today. */
+export function agendaRange(text, at) {
+  const word = text.trim().toLowerCase().replace(/[!?.]+$/, '').replace(/^(?:für |am |an |diese |dieses |die |das )/, '');
+  const weekday = new Date(at).getDay();
+  if (/^heute$/.test(word)) return { first: 0, days: 1, title: 'Heute' };
+  if (/^morgen$/.test(word)) return { first: 1, days: 1, title: 'Morgen' };
+  if (/^(?:übermorgen|uebermorgen)$/.test(word)) return { first: 2, days: 1, title: 'Übermorgen' };
+  if (/^woche$/.test(word)) return { first: 0, days: AGENDA_DAYS, title: `Die nächsten ${AGENDA_DAYS} Tage` };
+  if (/^(?:nächste|naechste|kommende) woche$/.test(word)) return { first: ((8 - weekday) % 7) || 7, days: 7, title: 'Nächste Woche' };
+  if (/^wochenende$/.test(word)) {
+    // On Sunday the weekend is today, from Monday on the coming one.
+    if (weekday === 0) return { first: 0, days: 1, title: 'Wochenende' };
+    return { first: 6 - weekday, days: 2, title: 'Wochenende' };
+  }
+  return null;
+}
+
 const short = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 const clean = (text) => text.replace(/[*_~`]/g, '').replace(/\s+/g, ' ').trim();
 
@@ -142,17 +159,25 @@ export function createCalendar({ db, fetchCalendar, birthdays, now = Date.now })
     return { lines: dayLines(dayStart, dayEnd, current, reminders(user, at, dayEnd)), failed, connected: db.calendars(user).length > 0 };
   }
 
-  async function agenda(user) {
+  /** The next days, or only the days in range: { first, days, title } from agendaRange. */
+  async function agenda(user, range = null) {
     const at = now();
+    const first = range?.first ?? 0;
+    const days = range?.days ?? AGENDA_DAYS;
     const calendars = db.calendars(user);
-    const end = addDays(at, AGENDA_DAYS);
-    const { events: fromCalendars, failed } = await events(user, at, end);
-    const found = [...birthdayEvents(user, at, end), ...fromCalendars];
-    const due = reminders(user, at, end);
-    if (!calendars.length && !due.length && !found.length) return HOW_TO;
+    const from = first ? addDays(at, first) : at;
+    const end = addDays(at, first + days);
+    const { events: fromCalendars, failed } = await events(user, from, end);
+    const found = [...birthdayEvents(user, from, end), ...fromCalendars];
+    const due = reminders(user, from, end);
+    if (!calendars.length && !due.length && !found.length) {
+      return range ? `📅 ${range.title}: keine Erinnerungen und Geburtstage.\n\n_Mit Kalender stehen hier auch deine Termine: \`kalender\`_` : HOW_TO;
+    }
 
-    const sections = [`📅 *Die nächsten ${AGENDA_DAYS} Tage*`];
-    for (let day = 0; day < AGENDA_DAYS; day++) {
+    // One day needs no heading above its own heading.
+    const single = days === 1;
+    const sections = single ? [] : [`📅 *${range?.title ?? `Die nächsten ${AGENDA_DAYS} Tage`}*`];
+    for (let day = first; day < first + days; day++) {
       const dayStart = addDays(at, day);
       const dayEnd = addDays(at, day + 1);
       const lines = dayLines(dayStart, dayEnd, found, due);
@@ -162,9 +187,10 @@ export function createCalendar({ db, fetchCalendar, birthdays, now = Date.now })
       let title = name;
       if (day === 0) title = `Heute, ${name}`;
       if (day === 1) title = `Morgen, ${name}`;
-      sections.push(`*${title}*\n${lines.join('\n')}`);
+      sections.push(`${single ? '📅 ' : ''}*${title}*\n${lines.join('\n')}`);
     }
-    if (sections.length === 1) sections.push('Keine Termine und Erinnerungen.');
+    if (single && !sections.length) sections.push(`📅 *${range.title}*\nKeine Termine und Erinnerungen.`);
+    else if (!single && sections.length === 1) sections.push('Keine Termine und Erinnerungen.');
     if (failed.length) sections.push(`⚠️ Nicht erreichbar: ${failed.join(', ')}`);
     sections.push(calendars.length
       ? `_Kalender: ${calendars.map((row) => `${row.nr}. ${row.name}`).join(', ')}_`
@@ -235,6 +261,9 @@ export function createCalendar({ db, fetchCalendar, birthdays, now = Date.now })
     if (REMOVE.test(first)) return remove(user, rest.join(' '), quiet);
     if (/^(erinnern|erinnerung|vorher|warnen)$/i.test(first)) return setAlert(user, rest.join(' '), quiet);
     if (/^(hilfe|verbinden|einrichten)$/i.test(first)) return HOW_TO;
+    // "termine morgen", "kalender nächste woche"
+    const range = agendaRange(text, now());
+    if (range) return agenda(user, range);
     return quiet ? null : `${HOW_TO}\n\nTrennen: \`kalender weg 1\` · vorher Bescheid: \`kalender erinnern 15\``;
   }
 

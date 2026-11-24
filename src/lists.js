@@ -10,6 +10,11 @@ const MAX_NOTE = 3000;
 const SHOWN_NOTES = 15;
 const CLEAR = /^(leeren|leer|löschen|loeschen|alles weg|alle weg|weg)$/i;
 const REMOVE = /^(weg|löschen|lösche|loeschen|entfernen)$/i;
+// Words in almost every question, they say nothing about what is meant.
+const COMMON = new Set(['habe', 'hast', 'haben', 'sind', 'mein', 'meine', 'meinen', 'meinem', 'meiner', 'deine', 'nicht', 'noch', 'auch', 'eine', 'einen', 'einer',
+  'kann', 'kannst', 'bitte', 'mich', 'dich', 'dass', 'oder', 'aber', 'schon', 'heute', 'morgen', 'gerade', 'wieder', 'dann', 'denn', 'doch', 'jetzt',
+  'hier', 'dort', 'warum', 'wieso', 'welche', 'welcher', 'welches', 'gibt', 'machen', 'mach', 'soll', 'will', 'wollte', 'brauche', 'wurde', 'wird',
+  'wann', 'woher', 'wohin', 'nochmal', 'eigentlich', 'immer', 'alles', 'etwas', 'viel', 'wieviel', 'dein', 'unser', 'unsere', 'diese', 'dieser', 'dieses']);
 
 const clean = (text) => text.replace(/^[\s\-•*·]+/, '').replace(/[*_~`]/g, '').replace(/\s+/g, ' ').trim();
 const firstLine = (text, max = 50) => {
@@ -39,7 +44,10 @@ export function createLists({ db, now = Date.now }) {
     const existing = new Set(db.items(user, list).map((item) => item.text.toLowerCase()));
     const texts = [];
     const twice = [];
-    for (const part of value.split(split)) {
+    const parts = value.split(split);
+    // "Milch, Eier und Butter" is three things, "Salz und Pfeffer" alone stays one.
+    if (list === 'shopping' && parts.length > 1) parts.push(...parts.pop().split(/\s+und\s+/i));
+    for (const part of parts) {
       const text = clean(part);
       if (!text) continue;
       if (text.length > MAX_ITEM) return `Ein Eintrag darf höchstens ${MAX_ITEM} Zeichen haben. Für Längeres gibt es \`notiz\`.`;
@@ -182,6 +190,22 @@ export function createLists({ db, now = Date.now }) {
     return sections.join('\n\n');
   }
 
+  /**
+   * For a sentence the bot did not understand, like "wo ist mein wlan passwort":
+   * notes and list entries that share a word with it, best match first.
+   */
+  function related(user, text) {
+    const words = [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u))].filter((word) => word.length >= 4 && !COMMON.has(word));
+    if (!words.length) return null;
+    const hits = (entry) => words.filter((word) => entry.toLowerCase().includes(word)).length;
+    const found = [
+      ...db.notes(user).map((note) => ({ hits: hits(note.text), line: `📝 *Notiz ${note.nr}:* ${firstLine(note.text, 70)}` })),
+      ...db.items(user).map((item) => ({ hits: hits(item.text), line: `📋 ${item.nr}. ${item.text} _(${LISTS[item.list].name})_` })),
+    ].filter((entry) => entry.hits).sort((a, b) => b.hits - a.hits).slice(0, 3);
+    if (!found.length) return null;
+    return `Meinst du das?\n\n${found.map((entry) => entry.line).join('\n')}\n\n_Suchen: \`suche ${words[0]}\` · alle Befehle: \`hilfe\`_`;
+  }
+
   function restoreItems(user, { items }) {
     db.restoreItems(items);
     const lists = [...new Set(items.map((item) => item.list))];
@@ -202,6 +226,8 @@ export function createLists({ db, now = Date.now }) {
     search,
     restoreItems,
     restoreNote,
+    overview,
+    related,
     items: (user, list) => db.items(user, list),
   };
 }

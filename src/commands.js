@@ -12,6 +12,7 @@ import { createLists } from './lists.js';
 import { advice, details, listEntry, priceText, productName, targetText } from './messages.js';
 import { formatMoney } from './money.js';
 import { createOptions } from './options.js';
+import { rephrase } from './phrases.js';
 import { createPurchases } from './purchases.js';
 import { createRates } from './rates.js';
 import { createReminders } from './reminders.js';
@@ -50,7 +51,10 @@ const WELCOME = `👋 *Hallo, ich bin dein Alltagshelfer.*
 
 \`hilfe\` zeigt alle Befehle.`;
 
-const CONVERSION = /^\s*\S*\d[\d.,]*\s*\S*\s+(?:in|nach|to|→)\s+\S+\s*$/i;
+const OFFER_MS = 10 * 60_000;
+const YES = /^(?:ja|jo|jep|jup|jawohl|genau|richtig|yes|ja,? bitte|ja,? genau|ja,? das|bitte)[\s!.👍]*$/iu;
+
+const CONVERSION =/^\s*\S*\d[\d.,]*\s*\S*\s+(?:in|nach|to|→)\s+\S+\s*$/i;
 const userMessage = (error) => {
   if (error instanceof UserError) return error.message;
   throw error;
@@ -78,6 +82,8 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
   const briefing = createBriefing({ db, weather, calendar, birthdays, lists, now });
   const expenses = createExpenses({ db, config, now });
   const tools = createTools({ rates, config });
+  // The last "Meintest du …?" per person, so that "ja" can accept it.
+  const offers = new Map();
   function yourProducts(user) {
     const products = db.products(user);
     if (!products.length) return EMPTY;
@@ -190,9 +196,13 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
     return replies.join('\n\n');
   }
 
-  function list(user) {
+  function list(user, orLists = false) {
     const products = db.products(user);
-    if (!products.length) return EMPTY;
+    if (!products.length) {
+      // "liste" from someone who only uses the shopping list means that one, "produkte" does not.
+      if (!orLists || !lists.items(user).length) return EMPTY;
+      return `${lists.overview(user)}\n\n_Preise beobachten: Schick mir einen Produktlink._`;
+    }
     const entries = products.map((p) => listEntry(p, db.firstPrice(p.id, p.currency), config.currency));
     const count = `${products.length} ${products.length === 1 ? 'Produkt' : 'Produkte'}`;
     return `📋 *${count}*\n\n${entries.join('\n\n')}\n\n_Mit Link ansehen:_ \`zeige ${products[0].id}\``;
@@ -350,12 +360,28 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
     if (action === 'list') return list(user);
 
     const guess = suggest(text);
-    if (guess) return `Meintest du \`${guess}\`?`;
+    if (guess) {
+      offers.set(user, { text: guess, at: now() });
+      return `Meintest du \`${guess}\`? Dann schick \`ja\`.`;
+    }
+    // "wo ist mein wlan passwort": maybe it is in a note.
+    const related = lists.related(user, text);
+    if (related) return related;
     return 'Das habe ich nicht verstanden.\n\n' +
       '• `erinnere mich morgen 9 an …`\n' +
       '• `einkauf Milch`, `todo …`, `notiz …`\n' +
       '• Schick einen *Produktlink* zum Beobachten\n' +
       '• `hilfe` zeigt alle Befehle';
+  }
+
+  /** The long welcome once, after that a short hello instead of the same text every morning. */
+  function greet(user) {
+    if (db.claimOnce(user, 'welcome', now())) return WELCOME;
+    const hour = new Date(now()).getHours();
+    let hello = 'Hallo';
+    if (hour >= 4 && hour < 11) hello = 'Guten Morgen';
+    else if (hour >= 18) hello = 'Guten Abend';
+    return `${hello}! 👋\nDein Tag: \`briefing\` · alle Befehle: \`hilfe\``;
   }
 
   /** "löschen billy": point to the number, but never act on a name. */
@@ -385,6 +411,22 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
     // "morgen 9" after "Wann soll ich dich erinnern?"
     const answered = reminders.answer(user, text);
     if (answered) return answered;
+
+    // "ja" after "Meintest du `löschen 3`?"
+    const offer = offers.get(user);
+    offers.delete(user);
+    if (offer && now() - offer.at < OFFER_MS && YES.test(text.trim())) return run(user, offer.text, { quiet });
+
+    // Whole sentences like "was muss ich einkaufen". Links are always what they are.
+    let phrase = /https?:\/\//i.test(text) ? null : rephrase(text);
+    if (phrase?.chatOnly && quiet) phrase = null;
+    if (phrase?.silent) return null;
+    // A question is meant for the bot, also in the self-chat.
+    if (phrase) return run(user, phrase.text, { quiet: quiet && !phrase.sure });
+    return run(user, text, { quiet });
+  }
+
+  async function run(user, text, { quiet }) {
     // A calendar link on its own is meant to connect the calendar, not to watch a price.
     if (isCalendarLink(text)) return calendar.command(user, text.trim(), quiet).catch(userMessage);
     // "= 12*3" and "100 usd in eur" need no command word.
@@ -405,7 +447,8 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
         case 'todo': return lists.todo(user, value, quiet);
         case 'done': return lists.done(user, value, quiet);
         case 'note': return lists.note(user, value, quiet);
-        case 'notes': return lists.notes(user);
+        // "notizen wlan" searches. In the self-chat "Notizen zum Meeting: …" is a note itself.
+        case 'notes': return value ? (quiet ? null : lists.search(user, value, quiet, db.reminders(user))) : lists.notes(user);
         case 'search': return lists.search(user, value, quiet, db.reminders(user));
         case 'weather': return await briefing.weather(user, value, quiet);
         case 'place': return await briefing.place(user, value, quiet);
@@ -419,9 +462,10 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
         case 'expense': return expenses.add(user, value, quiet);
         case 'expenses': return expenses.overview(user, value, quiet);
         case 'budget': return expenses.budget(user, value, quiet);
-        case 'hello': return quiet ? null : WELCOME;
+        case 'hello': return quiet ? null : greet(user);
+        case 'lists': return lists.overview(user);
         case 'thanks': return quiet ? null : 'Gern! 👍';
-        case 'list': return list(user);
+        case 'list': return list(user, /^liste\b/i.test(text.trim()));
         case 'undo': return undo(user);
         case 'export': return exportData(user);
         case 'savings': return purchases.savings(user);

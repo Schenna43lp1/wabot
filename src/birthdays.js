@@ -105,7 +105,12 @@ export function createBirthdays({ db, now = Date.now }) {
     if (REMOVE.test(words[0])) return remove(user, words.slice(1).join(' '), quiet);
     const at = now();
     const parsed = parseBirthday(text, at);
-    if (!parsed) return quiet ? null : 'So geht es: `geburtstag Anna 12.3.1990` oder ohne Jahr `geburtstag Anna 12.3.`';
+    if (!parsed) {
+      // "geburtstag anna" without a date looks it up.
+      const found = lookUp(user, text, at);
+      if (found) return found;
+      return quiet ? null : 'So geht es: `geburtstag Anna 12.3.1990` oder ohne Jahr `geburtstag Anna 12.3.`';
+    }
     if (parsed.error) return quiet ? null : parsed.error;
 
     const existing = db.birthdays(user).find((row) => row.name.toLowerCase() === parsed.name.toLowerCase());
@@ -119,6 +124,22 @@ export function createBirthdays({ db, now = Date.now }) {
       `Nächster Geburtstag ${when}${ageText(age, false)}.`,
       `Ich sage ${SOON_DAYS} Tage vorher und am Tag selbst um ${NOTIFY_HOUR} Uhr Bescheid.`,
     ].join('\n');
+  }
+
+  function lookUp(user, name, at) {
+    const search = name.toLowerCase().replace(/^(?:von|für)\s+/, '').replace(/s$/, '');
+    if (search.length < 2) return null;
+    const rows = db.birthdays(user).filter((row) => row.name.toLowerCase().startsWith(search) || row.name.toLowerCase().split(/\s+/).includes(search));
+    if (!rows.length) return null;
+    const today = startOfDay(at);
+    return rows.slice(0, 5).map((row) => {
+      const { start, age } = nextBirthday(row, at);
+      const days = Math.round((start - today) / DAY_MS);
+      let when = `in ${days} Tagen`;
+      if (days === 0) when = 'heute! 🎉';
+      else if (days === 1) when = 'morgen';
+      return `🎂 *${row.name}*: ${String(row.day).padStart(2, '0')}.${String(row.month).padStart(2, '0')}., nächstes Mal am ${shortDate(start)}, ${when}${ageText(age, false)}`;
+    }).join('\n');
   }
 
   function remove(user, value, quiet) {
