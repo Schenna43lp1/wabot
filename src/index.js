@@ -11,6 +11,7 @@ import { EXIT } from './exit-codes.js';
 import { getProduct } from './product.js';
 import { queueReminders } from './reminders.js';
 import { queueReports } from './report.js';
+import { createSpeech } from './speech.js';
 import { createTracker } from './tracker.js';
 import { startWhatsApp } from './whatsapp.js';
 
@@ -70,7 +71,9 @@ const tracker = createTracker({
   notify: () => void whatsapp?.flush(),
 });
 const handle = createCommands({ db, tracker, config });
-whatsapp = await startWhatsApp({ db, config, handle, log, onFatal: fail });
+const transcribe = config.speech ? createSpeech({ dataDir: config.dataDir, model: config.speechModel, log }) : null;
+transcribe?.warmUp().catch((error) => log(`Sprachmodell nicht geladen, neuer Versuch bei der ersten Sprachnachricht: ${error.message}`));
+whatsapp = await startWhatsApp({ db, config, handle, log, onFatal: fail, transcribe });
 
 let backupFailed = false;
 function backup() {

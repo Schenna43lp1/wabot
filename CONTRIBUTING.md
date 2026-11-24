@@ -15,6 +15,8 @@ Wie der Code aufgebaut ist und wie man einen neuen Befehl einbaut, steht in [doc
 
 - **Node.js 24, ESM, keine Build-Schritte.** Der Code läuft so, wie er im Repository liegt.
 - **Neue npm-Pakete nur mit gutem Grund.** Jedes Paket ist Angriffsfläche. Versionen werden exakt festgelegt (`.npmrc`: `save-exact`), Install-Skripte sind abgeschaltet.
+- **Große, optionale Pakete** kommen nicht in die Haupt-`package.json`, sondern in einen eigenen Ordner mit eigener Lockfile, wie die Spracherkennung in `speech/`. Der Bot muss ohne sie laufen.
+- **Neue Satzformen** gehören nach `src/phrases.js`, mit Beispiel in `test/phrases.test.js`. Jede Regel braucht auch einen Gegentest, dass eine ähnliche Notiz im Chat „Nachricht an dich selbst“ still bleibt.
 - **Kein `eval`, kein `new Function`, keine Shell-Befehle mit Nutzereingaben.**
 - **Links aus Nachrichten** nur über `fetchPage` oder `fetchCalendar` in `src/fetch-page.js` laden, damit Adressen im Heimnetz gesperrt bleiben.
 - **Datenbank:** immer vorbereitete Anweisungen mit Platzhaltern (`?`), nie Eingaben in SQL einsetzen. Neue Spalten über `addMissingColumns`, damit alte Datenbanken weiter funktionieren.

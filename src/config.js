@@ -29,6 +29,9 @@ export function readConfig(env) {
     currency: env.DEFAULT_CURRENCY || 'EUR',
     maxProducts: number('MAX_PRODUCTS_PER_USER', 50, 1),
     dataDir: resolve(root, env.DATA_DIR || 'data'),
+    // Voice messages, if "npm run sprache" installed the recognition. "aus" switches it off.
+    speech: !/^(aus|off|false|0|nein)$/i.test(env.SPEECH ?? ''),
+    speechModel: env.SPEECH_MODEL || undefined,
   };
 }
 

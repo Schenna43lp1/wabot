@@ -1,0 +1,10 @@
+{
+  "name": "wapricetracker-speech",
+  "private": true,
+  "description": "Optional: versteht Sprachnachrichten lokal mit Whisper. Installieren mit: npm run sprache",
+  "type": "module",
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2",
+    "ogg-opus-decoder": "1.7.5"
+  }
+}

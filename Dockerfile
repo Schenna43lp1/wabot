@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM node:24-alpine
+# Debian instead of Alpine: the optional speech recognition needs glibc.
+FROM node:24-slim
+
+# SPEECH=an in .env also builds the speech recognition into the image (about 700 MB more).
+ARG SPEECH=
 
 ENV NODE_ENV=production \
     TZ=Europe/Berlin \
@@ -11,6 +15,12 @@ WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev --no-audit --no-fund --loglevel=error \
  && npm cache clean --force
+
+COPY speech/package.json speech/package-lock.json speech/.npmrc speech/index.js ./speech/
+RUN case "$SPEECH" in \
+      ""|aus|off|false|0|nein) echo "Spracherkennung: aus" ;; \
+      *) npm ci --prefix speech --no-audit --no-fund --loglevel=error && npm cache clean --force ;; \
+    esac
 
 COPY src ./src
 

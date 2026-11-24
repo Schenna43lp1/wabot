@@ -57,6 +57,8 @@ const OVERVIEW = `*Alltagshelfer – Hilfe*
 Schick mir einen Produktlink. Ich melde mich, wenn der Preis fällt.
 \`liste\` zeigt deine Produkte
 
+💬 Du kannst auch ganz normal schreiben: \`was muss ich einkaufen?\` · \`Milch auf die Einkaufsliste\` · \`was steht morgen an?\`
+
 *Alle Befehle:* \`hilfe alltag\` · \`hilfe geld\` · \`hilfe preise\``;
 
 const DAILY_HELP = `*Alltag – alle Befehle*

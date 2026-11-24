@@ -87,6 +87,9 @@ jobs:
       - name: Bekannte Sicherheitslücken suchen
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Sicherheitslücken der Spracherkennung suchen
+        run: npm audit --prefix speech --omit=dev --audit-level=high
+
       - name: Paketsignaturen prüfen
         run: npm audit signatures
 

@@ -40,12 +40,12 @@ const SHOPPING_QUESTION = /^(?:was (?:muss|soll|sollte|wollte) ich (?:noch )?(?:
 const TODO_QUESTION = /^(?:was (?:muss|soll|sollte) ich (?:noch |heute |alles )*(?:tun|machen|erledigen)|was ist (?:noch )?(?:zu tun|offen)|was steht auf (?:der|meiner) (?:to-?do-?liste|todo-?liste|aufgabenliste))$/i;
 const DAY_QUESTION = /^(?:was (?:steht|liegt) (?:heute )?an|was (?:habe|hab) ich heute(?: vor)?|was ist heute(?: los)?|wie sieht mein tag aus|mein tag|mein tagesplan|tagesplan|tagesübersicht|was gibt'?s heute)$/i;
 const LATER_QUESTION = /^(?:was (?:steht|liegt) (morgen|übermorgen|diese woche|nächste woche) an|was (?:habe|hab) ich (morgen|übermorgen|diese woche|nächste woche)(?: vor)?|was ist (morgen|übermorgen)(?: los)?|wie sieht (?:mein )?(morgen|die woche) aus)$/i;
-const WEATHER_QUESTION = /^(?:wie (?:wird|ist) das wetter|wie wird es|wie ist es draußen|wetterbericht|wettervorhersage|regnet es|wird es regnen|schneit es|brauche ich (?:einen )?(?:regen)?schirm|wie (?:kalt|warm) (?:ist|wird) es)(?:\s+(?:heute|morgen|jetzt|gerade|draußen))?(?:\s+in\s+(.+?))?(?:\s+(?:heute|morgen|jetzt|gerade))?$/i;
+const WEATHER_QUESTION = /^(?:wie (?:wird|ist) das wetter|wie wird es|wie ist es draußen|wetterbericht|wettervorhersage|regnet es|wird es regnen|schneit es|wird es (?:heute |morgen )?(?:regnen|schneien|kalt|warm|sonnig|heiß)|brauche ich (?:einen )?(?:regen)?schirm|wie (?:kalt|warm) (?:ist|wird) es)(?:\s+(?:heute|morgen|jetzt|gerade|draußen))?(?:\s+in\s+(.+?))?(?:\s+(?:heute|morgen|jetzt|gerade))?$/i;
 const SPENT_QUESTION = /^wie ?viel (?:habe|hab) ich (.*?)\s*ausgegeben$/i;
 const SPENT = /^(?:ich )?(?:habe |hab )?(.*\d.*?)\s+(?:ausgegeben|bezahlt)$/i;
 // "heute 20 € für Essen": the first word after the amount is the category, so these must go.
 const SPENT_FILLER = /(?<=^|\s)(?:heute|gestern|eben|gerade|grad|vorhin|insgesamt|so|ca\.?|etwa|für|fuer)\s+/gi;
-const BIRTHDAY_QUESTION = /^wann (?:hat|ist) (.+?) geburtstag$/i;
+const BIRTHDAY_QUESTION = /^wann (?:hat|ist) (.+?) geburtstag$|^wann ist (?:der )?geburtstag (?:von )?(.+)$/i;
 const BIRTHDAY_IS = /^(.+?) (?:hat|hatte) (?:am |den )?(\d.*?|.*\d) geburtstag$/i;
 const BIRTHDAY_ON = /^(.+?) (?:hat|hatte) geburtstag (?:am |den )?(.*\d.*)$/i;
 const REMIND_AT_END = /^(?:(?:kannst|könntest|würdest) du |bitte )*mich (?:bitte )?(.+?) erinnern$/i;
@@ -70,6 +70,9 @@ const SPELLINGS = [
   [/\brueckgaengig\b/gi, 'rückgängig'], [/\bloesch/gi, 'lösch'], [/\bfueg/gi, 'füg'], [/\beinkaeufe\b/gi, 'einkäufe'],
   [/\bmuesst/gi, 'müsst'], [/\bwieviel\b/gi, 'wie viel'], [/\bwie vil\b/gi, 'wie viel'], [/\bgeburtstg\b/gi, 'geburtstag'],
 ];
+const SPACED = [[/\bto do\b/gi, 'todo'], [/\bto dos\b/gi, 'todos'], [/\beinkaufs liste\b/gi, 'einkaufsliste'], [/\bnotiz en\b/gi, 'notizen']];
+const BYE = /^(?:tschüss|tschüs|tschau|ciao|bye|bis (?:später|morgen|dann|bald|nachher)|gute nacht|n8|schlaf gut|schönen (?:abend|tag)|ade|servus und tschüss)$/i;
+const CLOCK = /^(?:wie spät ist es|wie viel uhr ist es|uhrzeit|welcher tag ist heute|welches datum (?:ist|haben wir) heute|der wievielte ist heute|was ist heute für ein tag|welchen tag haben wir)$/i;
 const NEW = /^neu(?:e|es|er|en)?\s+(?=(?:notiz|erinnerung|aufgabe|todo|to-do|ausgabe|geburtstag|eintrag)\b)/i;
 const CLEAR_LIST = new RegExp(`^(?:lösch(?:e)?|leer(?:e)?|lehr(?:e)?)\\s+(?:die\\s+|meine\\s+|den\\s+|ganze\\s+)*${LIST}$`, 'i');
 const WAKE = /^weck(?:e)? mich (?:bitte )?(.+)$/i;
@@ -80,12 +83,21 @@ const SAVED = /^(?:was|wie ?viel) (?:habe|hab) ich (?:bisher |schon |insgesamt )
  *   { text, sure }  the command to run instead; sure = clearly meant for the bot, also in the self-chat
  *                   chatOnly = only outside the self-chat, where it could be a diary entry
  *   { silent }      an acknowledgement, no answer needed
+ *   { answer }      a fixed reply, like "Gute Nacht! 🌙"
+ *   { clock }       the time and date
  *   null            nothing to rephrase
  */
 export function rephrase(input) {
-  let text = input.trim().replace(/\s+/g, ' ').replace(/[\s?!.]+$/, '');
-  if (!text || text.length > 300) return null;
-  for (const [pattern, word] of SPELLINGS) text = text.replace(pattern, word);
+  const original = input.trim().replace(/\s+/g, ' ').replace(/[\s?!.]+$/, '');
+  if (!original || original.length > 300) return null;
+  let text = original;
+  for (const [pattern, word] of [...SPELLINGS, ...SPACED]) text = text.replace(pattern, word);
+  const result = match(input, text);
+  // "To Do" → "todo": a spelling fix alone is worth passing on.
+  return result ?? (text !== original ? { text, sure: false } : null);
+}
+
+function match(input, text) {
   // "neue Notiz: …" is "notiz …"
   if (NEW.test(text)) return { text: text.replace(NEW, ''), sure: false };
   const sure = (command) => ({ text: command, sure: true });
@@ -104,6 +116,8 @@ export function rephrase(input) {
   if (FREE_TEXT.has(actionOf(text.split(' ')[0].replace(/[!?.,:]+$/, '')))) return null;
   if (THANKS.test(input.trim()) || THANKS.test(text)) return plain('danke');
   if (GREETING.test(text)) return plain('hallo');
+  if (BYE.test(text)) return { answer: /nacht|n8|schlaf/i.test(text) ? 'Gute Nacht! 🌙' : 'Bis bald! 👋' };
+  if (CLOCK.test(text)) return { clock: true };
   if (HELP.test(text)) return sure('hilfe');
   if (UNDO.test(text)) return plain('rückgängig');
   if (PRODUCTS.test(text)) return sure('produkte');
@@ -129,7 +143,7 @@ export function rephrase(input) {
   if (spent && !/^ausgabe/i.test(text)) return { ...plain(`ausgabe ${spent[1].replace(SPENT_FILLER, '').trim()}`), chatOnly: true };
 
   const birthdayQuestion = text.match(BIRTHDAY_QUESTION);
-  if (birthdayQuestion) return sure(`geburtstag ${birthdayQuestion[1]}`);
+  if (birthdayQuestion) return sure(`geburtstag ${birthdayQuestion[1] ?? birthdayQuestion[2]}`);
   const birthday = text.match(BIRTHDAY_IS) ?? text.match(BIRTHDAY_ON);
   if (birthday) return plain(`geburtstag ${birthday[1]} ${birthday[2]}`);
 

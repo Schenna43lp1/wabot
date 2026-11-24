@@ -88,6 +88,12 @@ const SENTENCES = [
   ['hallo Bot', 'hallo'],
   ['Vielen Dank!', 'danke'],
   ['danke dir 🙏', 'danke'],
+  ['To Do', 'todo'],
+  ['wird es morgen regnen?', 'wetter'],
+  ['wann ist der Geburtstag von Anna', 'geburtstag Anna'],
+  ['Tschüss!', null, { answer: 'Bis bald! 👋' }],
+  ['gute Nacht', null, { answer: 'Gute Nacht! 🌙' }],
+  ['wie spät ist es?', null, { clock: true }],
   ['ok', null, SILENT],
   ['Alles klar!', null, SILENT],
   ['👍', null, SILENT],
@@ -119,7 +125,7 @@ test('command words without umlauts or with capitals', () => {
     ['rueckgaengig', 'undo'], ['ruckgangig', 'undo'], ['LÖSCHEN 3', 'remove'], ['loesche 3', 'remove'], ['spaeter', 'snooze'],
     ['Uebersicht', 'report'], ['pruefen 2', 'check'], ['Einkaeufe', 'shopping'], ['Einkaufszettel', 'shopping'], ['tagesuebersicht', 'briefing'],
     ['Hallöchen', 'hello'], ['Dankeschön', 'thanks'], ['Memo Code 1234', 'note'], ['Tasks', 'todo'], ['hak 3 ab', 'done'],
-    ['Haushaltsbuch', 'expenses'], ['Vorhersage', 'weather'], ['Taschenrechner 2+2', 'calc'], ['Preise', 'list'],
+    ['Haushaltsbuch', 'expenses'], ['erinere mich morgen an Arzt', 'remind'], ['erinnr mich', 'remind'], ['notizn', 'notes'], ['Vorhersage', 'weather'], ['Taschenrechner 2+2', 'calc'], ['Preise', 'list'],
   ]) {
     assert.equal(parseInput(text)?.action, action, text);
   }
@@ -151,6 +157,9 @@ test('chat: "ja" accepts a suggestion, unknown questions find notes', async () =
   assert.match(await handle(U, 'wo ist mein wlan passwort?'), /Meinst du das\?[\s\S]*Notiz 1:\* WLAN Gäste/);
   assert.match(await handle(U, 'Hab heute 20 Euro für Pizza ausgegeben'), /20,00.€.*Pizza/);
   assert.equal(await handle(U, 'ok'), null);
+  assert.equal(await handle(U, 'gute Nacht'), 'Gute Nacht! 🌙');
+  assert.equal(await handle(U, 'gute Nacht', { quiet: true }), null, 'a diary line in the self-chat');
+  assert.equal(await handle(U, 'wie spät ist es?'), '🕐 15:00 Uhr, Dienstag, 24. November 2026');
 });
 
 test('greeting: the long welcome once, then short', async () => {

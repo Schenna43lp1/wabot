@@ -421,6 +421,12 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
     let phrase = /https?:\/\//i.test(text) ? null : rephrase(text);
     if (phrase?.chatOnly && quiet) phrase = null;
     if (phrase?.silent) return null;
+    if (phrase?.answer) return quiet ? null : phrase.answer;
+    if (phrase?.clock) {
+      const date = new Date(now());
+      const day = date.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      return `🕐 ${date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr, ${day}`;
+    }
     // A question is meant for the bot, also in the self-chat.
     if (phrase) return run(user, phrase.text, { quiet: quiet && !phrase.sure });
     return run(user, text, { quiet });
@@ -465,7 +471,7 @@ export function createCommands({ db, tracker, config, weather = createWeather(),
         case 'hello': return quiet ? null : greet(user);
         case 'lists': return lists.overview(user);
         case 'thanks': return quiet ? null : 'Gern! 👍';
-        case 'list': return list(user, /^liste\b/i.test(text.trim()));
+        case 'list': return list(user, /(?:^|\s)liste\b/i.test(text));
         case 'undo': return undo(user);
         case 'export': return exportData(user);
         case 'savings': return purchases.savings(user);

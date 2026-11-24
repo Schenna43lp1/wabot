@@ -25,7 +25,7 @@ const WORDS = {
   savings: ['ersparnis', 'gespart', 'erspartes', 'bilanz'],
   chart: ['diagramm', 'grafik', 'chart'],
   // Everyday helper
-  remind: ['erinnere', 'erinner', 'erinnern', 'erinnerung', 'remind', 'reminder'],
+  remind: ['erinnere', 'erinner', 'erinnern', 'erinnerung', 'remind', 'reminder', 'erinere', 'erinre', 'erinnr', 'erinnre', 'erinnerr'],
   reminders: ['erinnerungen', 'reminders', 'erinnerungsliste'],
   calendar: ['kalender', 'calendar', 'termine', 'terminkalender', 'agenda'],
   birthday: ['geburtstag', 'geburtstage', 'gebtag', 'bday', 'birthday'],
@@ -41,7 +41,7 @@ const WORDS = {
   todo: ['todo', 'todos', 'to-do', 'to-dos', 'todoliste', 'to-do-liste', 'aufgabe', 'aufgaben', 'aufgabenliste', 'task', 'tasks'],
   done: ['erledigt', 'done', 'abhaken', 'abgehakt', 'hak', 'hake', 'streiche', 'streichen', 'geschafft', 'fertig'],
   note: ['notiz', 'notiere', 'notier', 'notieren', 'merke', 'merk', 'merken', 'note', 'memo'],
-  notes: ['notizen', 'notes', 'memos'],
+  notes: ['notizen', 'notizn', 'notes', 'memos'],
   lists: ['listen'],
   search: ['suche', 'such', 'suchen', 'search'],
   weather: ['wetter', 'weather', 'wetterbericht', 'wettervorhersage', 'vorhersage'],

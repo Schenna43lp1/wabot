@@ -1,6 +1,10 @@
 services:
   bot:
-    build: .
+    build:
+      context: .
+      args:
+        # SPEECH=an in .env: voice messages are understood, the image gets about 700 MB bigger.
+        SPEECH: ${SPEECH:-}
     image: wa-alltagshelfer
     container_name: wa-alltagshelfer
     restart: unless-stopped
