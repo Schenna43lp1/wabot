@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import makeWASocket, {
-  BufferJSON, DisconnectReason, downloadMediaMessage, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState,
+  BufferJSON, DisconnectReason, downloadMediaMessage, isLidUser, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState,
 } from 'baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
@@ -13,6 +13,7 @@ import { cleanTranscript, MAX_SECONDS } from './speech.js';
 // Prefix of every bot message, so the self-chat cannot answer itself in a loop.
 const MARK = '🤖 ';
 const DAY_MS = 86_400_000;
+const MAX_VOICE_BYTES = 5_000_000;
 const TYPING_AFTER_MS = 600;
 // Older messages say when they were written: the price may have moved since.
 const DELAYED_MS = 30 * 60_000;
@@ -20,8 +21,15 @@ const DELAYED_MS = 30 * 60_000;
 const KEYS = process.stdin.isTTY;
 const ONLY_TEXT = 'Ich kann nur Text lesen. Schick mir den Produktlink als Nachricht, am schnellsten über „Teilen“ im Shop.';
 const NO_SPEECH = '🎤 Sprachnachrichten verstehe ich noch nicht, bitte schreib mir. Einschalten lässt sich das am PC des Bots (README, „Sprachnachrichten“).';
-const NOT_HEARD = '🎤 Ich habe in der Sprachnachricht nichts verstanden. Sprich bitte etwas lauter oder schreib mir.';
-const TOO_LONG = `🎤 Die Sprachnachricht ist zu lang. Ich höre mir höchstens ${MAX_SECONDS / 60} Minuten an.`;
+const NOT_HEARD = '🎤 Ich habe in der Sprachnachricht keine Worte verstanden. Sprich bitte etwas näher am Handy oder schreib mir.';
+const TOO_LONG = `🎤 Die Sprachnachricht ist zu lang. Ich höre mir höchstens ${MAX_SECONDS / 60} Minuten an, kurze Sätze klappen am besten.`;
+const SPEECH_FAILED = {
+  format: '🎤 Diese Audiodatei kann ich nicht abspielen. Ich verstehe Sprachnachrichten, die du direkt in WhatsApp aufnimmst.',
+  load: '🎤 Mein Sprachmodell lässt sich gerade nicht laden, bitte schreib mir. Details stehen im Bot-Fenster.',
+  long: TOO_LONG,
+  download: '🎤 Die Sprachnachricht konnte ich nicht herunterladen. Schick sie bitte noch einmal.',
+};
+const LOADING = '🎤 Einen Moment, ich lade beim ersten Mal noch das Sprachmodell …';
 
 const DISCONNECTED = {
   405: 'WhatsApp lehnt diese Bot-Version ab (siehe README, Probleme)',
@@ -73,9 +81,11 @@ export async function startWhatsApp({
       markOnlineOnConnect: false,
       shouldSyncHistoryMessage: () => false,
       // WhatsApp asks for the original when a device could not decrypt it.
-      getMessage: async ({ id }) => {
-        const body = id && db.sent(id);
-        return body ? JSON.parse(body, BufferJSON.reviver) : undefined;
+      // Anyone can ask for any id, so only the chat that got the message gets it again.
+      getMessage: async ({ id, remoteJid }) => {
+        const row = id && db.sent(id);
+        if (!row?.chat || !(await sameChat(sock, row.chat, remoteJid))) return undefined;
+        return JSON.parse(row.body, BufferJSON.reviver);
       },
     });
     sock = current;
@@ -155,8 +165,8 @@ export async function startWhatsApp({
       return;
     }
     const voice = !text && content?.audioMessage ? content.audioMessage : null;
-    // In the self-chat photos and voice messages are notes, unless the bot can listen.
-    if (!text && sender.self && !(voice && transcribe)) return;
+    // In the self-chat photos, audio files and voice messages are notes, unless the bot can listen to voice.
+    if (!text && sender.self && !(voice && voice.ptt !== false && transcribe)) return;
     if (!db.claimMessage(`${sender.user}:${key.id}`)) return;
 
     // One message after the other per user.
@@ -193,14 +203,30 @@ export async function startWhatsApp({
   async function listen(socket, raw, voice, sender) {
     const quiet = sender.self;
     if (!transcribe) return NO_SPEECH;
-    if (Number(voice.seconds) > MAX_SECONDS) return quiet ? null : TOO_LONG;
-    let heard;
+    // Two minutes of WhatsApp voice are about 300 KB. Anything far bigger is no voice message.
+    if (Number(voice.seconds) > MAX_SECONDS || Number(voice.fileLength) > MAX_VOICE_BYTES) return quiet ? null : TOO_LONG;
+    let audio;
     try {
-      heard = cleanTranscript(await transcribe(await download(raw, socket)));
+      audio = await download(raw, socket);
+    } catch (error) {
+      log(`Sprachnachricht nicht heruntergeladen: ${error.message}`);
+      return quiet ? null : SPEECH_FAILED.download;
+    }
+    // seconds and fileLength are what the sender's phone claims, the file itself counts.
+    if (audio?.length > MAX_VOICE_BYTES) return quiet ? null : TOO_LONG;
+    // Only the very first voice message after the start waits for the model.
+    if (!quiet && transcribe.isReady?.() === false) await answer(sender, LOADING);
+    let heard;
+    const started = now();
+    try {
+      heard = cleanTranscript(await transcribe(audio));
     } catch (error) {
       log(`Sprachnachricht nicht verstanden: ${error.message}`);
-      return quiet ? null : NOT_HEARD;
+      return quiet ? null : (SPEECH_FAILED[error.kind] ?? NOT_HEARD);
     }
+    // How long it took, never what was said.
+    const took = ((now() - started) / 1000).toFixed(1).replace('.', ',');
+    log(`🎤 Sprachnachricht (${Number(voice.seconds) || '?'} s) ${heard ? 'verstanden' : 'ohne erkennbare Worte'} in ${took} s.`);
     if (!heard) return quiet ? null : NOT_HEARD;
     // In the self-chat a voice memo that is no command stays a memo.
     const reply = await handle(sender.user, heard, { quiet });
@@ -233,7 +259,7 @@ export async function startWhatsApp({
     if (!online) throw new Error('offline');
     for (const part of splitText(text)) {
       const sent = await sock.sendMessage(jid, { text: MARK + part });
-      remember(sent);
+      remember(sent, jid);
     }
   }
 
@@ -242,7 +268,7 @@ export async function startWhatsApp({
     const sent = await sock.sendMessage(jid, {
       document: file.data, fileName: file.name, mimetype: file.mimetype, caption: MARK + text,
     });
-    remember(sent);
+    remember(sent, jid);
   }
 
   async function sendImage(jid, { text, image }) {
@@ -256,11 +282,12 @@ export async function startWhatsApp({
       // Baileys needs sharp or jimp for a preview. Without one the phone loads the full image.
       jpegThumbnail: '',
     });
-    remember(sent);
+    remember(sent, jid);
   }
 
-  function remember(sent) {
-    if (sent?.key.id) db.saveSent(sent.key.id, JSON.stringify(sent.message, BufferJSON.replacer));
+  // The chat we sent to, so only that chat may ask for the message again.
+  function remember(sent, jid) {
+    if (sent?.key.id) db.saveSent(sent.key.id, JSON.stringify(sent.message, BufferJSON.replacer), jid);
   }
 
   async function flush() {
@@ -300,6 +327,20 @@ export async function startWhatsApp({
       sock?.end(undefined);
     },
   };
+}
+
+/** True when both are the same person, whether WhatsApp names them by number or by LID. */
+export async function sameChat(socket, a, b) {
+  if (!a || !b) return false;
+  const own = [socket.user?.id, socket.user?.lid].filter(Boolean).map((jid) => jidNormalizedUser(jid));
+  const person = async (jid) => {
+    const normalized = jidNormalizedUser(jid);
+    if (own.includes(normalized)) return 'self';
+    if (!isLidUser(normalized)) return normalized;
+    const phone = await Promise.resolve(socket.signalRepository?.lidMapping?.getPNForLID(normalized)).catch(() => null);
+    return phone ? jidNormalizedUser(phone) : normalized;
+  };
+  return (await person(a)) === (await person(b));
 }
 
 export function splitText(text, max = 3500) {

@@ -19,8 +19,11 @@ export function helpText(config, topic) {
   if (topic === 'prices') return pricesHelp(config);
   if (topic === 'daily') return DAILY_HELP;
   if (topic === 'money') return MONEY_HELP;
-  return OVERVIEW;
+  // Speech recognition is on unless switched off. Without the packages the bot explains how to install them.
+  return config?.speech === false ? OVERVIEW : OVERVIEW.replace(SAY_IT, `${SAY_IT}\n🎤 Oder sag es einfach per Sprachnachricht.`);
 }
+
+const SAY_IT = '`was steht morgen an?`';
 
 const OVERVIEW = `*Alltagshelfer – Hilfe*
 

@@ -57,8 +57,9 @@ const SENTENCES = [
   ['welche Termine habe ich morgen', 'termine morgen'],
   ['meine Termine', 'termine'],
   ['wie wird das Wetter?', 'wetter'],
-  ['wie wird das wetter morgen in Graz', 'wetter Graz'],
-  ['regnet es morgen', 'wetter'],
+  ['wie wird das wetter morgen in Graz', 'wetter morgen Graz'],
+  ['wie wird das Wetter in Wien morgen?', 'wetter morgen Wien'],
+  ['regnet es morgen', 'wetter morgen'],
   ['brauche ich einen Schirm', 'wetter'],
   ['wie kalt ist es draussen', 'wetter'],
   ['wann hat Anna Geburtstag?', 'geburtstag Anna'],
@@ -89,7 +90,7 @@ const SENTENCES = [
   ['Vielen Dank!', 'danke'],
   ['danke dir 🙏', 'danke'],
   ['To Do', 'todo'],
-  ['wird es morgen regnen?', 'wetter'],
+  ['wird es morgen regnen?', 'wetter morgen'],
   ['wann ist der Geburtstag von Anna', 'geburtstag Anna'],
   ['Tschüss!', null, { answer: 'Bis bald! 👋' }],
   ['gute Nacht', null, { answer: 'Gute Nacht! 🌙' }],
@@ -98,7 +99,37 @@ const SENTENCES = [
   ['Alles klar!', null, SILENT],
   ['👍', null, SILENT],
   ['❤️🙏', null, SILENT],
+  // Openers, as in voice messages
+  ['Hallo, erinnere mich morgen an den Zahnarzt', 'erinnere mich morgen an den Zahnarzt'],
+  ['Ähm, was muss ich einkaufen?', 'einkauf'],
+  ['Okay, schreib Milch und Eier auf die Einkaufsliste', 'einkauf Milch, Eier'],
+  ['Hey Bot, wie wird das Wetter?', 'wetter'],
+  ['Hey, kannst du mich morgen um 8 an den Termin erinnern?', 'erinnere mich morgen um 8 an den Termin'],
+  ['Ok, danke', 'danke'],
+  ['kannst du mich morgen daran erinnern, die Wäsche aufzuhängen?', 'erinnere mich morgen daran, die Wäsche aufzuhängen'],
+  ['Merk dir, dass der Schlüssel beim Nachbarn ist', 'notiz der Schlüssel beim Nachbarn ist'],
+  ['Notiere, dass Tim 5 € bekommt', 'notiz Tim 5 € bekommt'],
+  ['was habe ich morgen für Termine?', 'termine morgen'],
+  ['habe ich am Wochenende was vor?', 'termine am Wochenende'],
+  ['was habe ich heute für Termine', 'briefing'],
+  ['was ist auf meiner Einkaufsliste?', 'einkauf'],
+  ['was steht noch auf meiner To-do-Liste', 'todo'],
+  ['was fehlt noch?', 'einkauf'],
 ];
+
+// Only in chats with the bot: in the self-chat these could be diary entries.
+const CHAT_ONLY = [
+  ['ich brauche noch Milch und Brot', 'einkauf Milch, Brot'],
+  ['wir brauchen Klopapier', 'einkauf Klopapier'],
+  ['die Milch ist alle', 'einkauf Milch'],
+  ['ich muss noch die Steuererklärung machen', 'todo die Steuererklärung machen'],
+];
+for (const [sentence, command] of CHAT_ONLY) {
+  test(`rephrase "${sentence}" only in chats`, () => assert.deepEqual(rephrase(sentence), { text: command, sure: false, chatOnly: true }));
+}
+for (const text of ['ich brauche Urlaub', 'ich brauche hilfe', 'ich muss los', 'mein Akku ist leer']) {
+  test(`rephrase is no list entry: "${text}"`, () => assert.equal(rephrase(text)?.chatOnly, undefined));
+}
 
 for (const [sentence, command, special] of SENTENCES) {
   test(`rephrase "${sentence}"`, () => {
@@ -175,7 +206,8 @@ test('agenda for one day, weather with a day, list falls back to shopping', asyn
   await handle(U, 'erinnere mich morgen 9 an Arzt');
   assert.equal(await handle(U, 'was steht morgen an?'), '📅 *Morgen, Mi 25.11.*\n⏰ 09:00 Arzt\n\n_Kalender verbinden: `kalender` und dein iCal-Link_');
   assert.match(await handle(U, 'termine übermorgen'), /Übermorgen: keine Erinnerungen/);
-  assert.match(await handle(U, 'wie wird das wetter morgen in wien'), /Wien heute[\s\S]*Morgen:/);
+  assert.match(await handle(U, 'wie wird das wetter morgen in wien'), /^\S+ \*Wien morgen:\*[\s\S]*Wien heute/);
+  assert.match(await handle(U, 'wetter wien'), /^\S+ \*Wien heute[\s\S]*Morgen:/);
   assert.match(await handle(U, 'wetter morgen'), /Für welchen Ort/);
   assert.match(await handle(U, 'liste'), /Du beobachtest noch nichts/);
   await handle(U, 'einkauf Milch, Eier und Butter');

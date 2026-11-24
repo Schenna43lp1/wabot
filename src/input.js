@@ -193,7 +193,7 @@ export function suggest(input) {
 }
 
 /** Edit distance, counting two swapped letters as one mistake. */
-function distance(a, b) {
+export function distance(a, b) {
   const rows = Array.from({ length: a.length + 1 }, (_, i) => [i]);
   for (let j = 1; j <= b.length; j++) rows[0][j] = j;
   for (let i = 1; i <= a.length; i++) {

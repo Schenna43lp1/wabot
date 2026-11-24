@@ -84,14 +84,15 @@ export function todayText(place, weather) {
   return lines.join('\n');
 }
 
-/** The answer to "wetter". */
-export function weatherText(place, weather) {
+/** The answer to "wetter". Asked about tomorrow, tomorrow comes first. */
+export function weatherText(place, weather, { tomorrowFirst = false } = {}) {
   const lines = [todayText(place, weather).replace(':*', ' heute:*')];
   if (weather.now.temperature != null) {
     lines.push(`Jetzt ${degrees(weather.now.temperature)} °C, ${describe(weather.now.code)[1]}`);
   }
   if (weather.tomorrow.min != null) {
     const tomorrow = dayText(weather.tomorrow);
+    if (tomorrowFirst) return [`${tomorrow.icon} *${place.split(',')[0]} morgen:* ${tomorrow.text}`, '', ...lines].join('\n');
     lines.push(`${tomorrow.icon} *Morgen:* ${tomorrow.text}`);
   }
   return lines.join('\n');

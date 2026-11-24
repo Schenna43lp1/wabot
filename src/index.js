@@ -17,6 +17,9 @@ import { startWhatsApp } from './whatsapp.js';
 
 const log = (text) => process.stdout.write(`[${new Date().toLocaleString('de-DE')}] ${text}\n`);
 
+// The WhatsApp session in data/auth is the account: new files only for this user (no effect on Windows).
+process.umask(0o077);
+
 // libsignal prints whole sessions, private keys included, through these methods.
 console.info = () => {};
 console.warn = () => {};

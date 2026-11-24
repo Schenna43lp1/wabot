@@ -144,8 +144,10 @@ export function createLists({ db, now = Date.now }) {
     return `📝 Notiz ${note.nr} gespeichert.\nWiederfinden: \`suche ${firstWord(text)}\` · alle: \`notizen\``;
   }
 
+  /** A word worth searching for: "Der Schlüssel liegt beim Nachbarn" → "schlüssel". */
   function firstWord(text) {
-    return text.split(/\s+/).find((word) => word.replace(/\W/g, '').length >= 3)?.replace(/[^\p{L}\p{N}-]/gu, '').toLowerCase() || 'wort';
+    const words = text.split(/\s+/).map((word) => word.replace(/[^\p{L}\p{N}-]/gu, '').toLowerCase());
+    return words.find((word) => word.length >= 4 && !COMMON.has(word)) || words.find((word) => word.length >= 3) || 'wort';
   }
 
   function notes(user) {

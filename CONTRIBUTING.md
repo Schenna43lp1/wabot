@@ -17,6 +17,7 @@ Wie der Code aufgebaut ist und wie man einen neuen Befehl einbaut, steht in [doc
 - **Neue npm-Pakete nur mit gutem Grund.** Jedes Paket ist Angriffsfläche. Versionen werden exakt festgelegt (`.npmrc`: `save-exact`), Install-Skripte sind abgeschaltet.
 - **Große, optionale Pakete** kommen nicht in die Haupt-`package.json`, sondern in einen eigenen Ordner mit eigener Lockfile, wie die Spracherkennung in `speech/`. Der Bot muss ohne sie laufen.
 - **Neue Satzformen** gehören nach `src/phrases.js`, mit Beispiel in `test/phrases.test.js`. Jede Regel braucht auch einen Gegentest, dass eine ähnliche Notiz im Chat „Nachricht an dich selbst“ still bleibt.
+- **Hörfehler von Whisper** (`MISHEARD` in `src/speech.js`) nur eintragen, wenn sie in echten oder erzeugten Aufnahmen vorkamen, und so eng wie möglich: „Rückgang“ nur nach „mach das“, nicht überall. Beispiel und Gegenbeispiel kommen in `test/speech.test.js`.
 - **Kein `eval`, kein `new Function`, keine Shell-Befehle mit Nutzereingaben.**
 - **Links aus Nachrichten** nur über `fetchPage` oder `fetchCalendar` in `src/fetch-page.js` laden, damit Adressen im Heimnetz gesperrt bleiben.
 - **Datenbank:** immer vorbereitete Anweisungen mit Platzhaltern (`?`), nie Eingaben in SQL einsetzen. Neue Spalten über `addMissingColumns`, damit alte Datenbanken weiter funktionieren.

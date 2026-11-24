@@ -6,7 +6,9 @@ import { currencyOf, parsePrice, structuredCents } from './money.js';
 
 const SOLD_OUT = /OutOfStock|SoldOut|Discontinued|^oos$|out[ _]of[ _]stock/i;
 const list = (value) => (value == null ? [] : Array.isArray(value) ? value : [value]);
-const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+// Shop pages are untrusted: control characters could rewrite the terminal, bidi marks reorder the text.
+const UNSAFE = /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g;
+const clean = (value) => String(value ?? '').replace(UNSAFE, ' ').replace(/\s+/g, ' ').trim();
 const isType = (node, ...types) =>
   list(node?.['@type']).some((type) => types.includes(String(type).split('/').pop()));
 
@@ -42,7 +44,8 @@ export function extractProduct(html, pageUrl, { selector, currency = 'EUR' } = {
   return {
     title: title.slice(0, 120),
     cents: found.cents ?? null,
-    currency: String(found.currency || currency).toUpperCase(),
+    // Only a three-letter code, whatever the page claims.
+    currency: /^[a-z]{3}$/i.test(clean(found.currency)) ? clean(found.currency).toUpperCase() : currency,
     available: found.available ?? true,
     from: found.from ?? false,
     source: found.source,

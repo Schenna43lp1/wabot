@@ -59,7 +59,8 @@ export function openDatabase(file) {
       pending         TEXT,
       calendar_alert  INTEGER
     );
-    CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT);
+    -- chat: who got a sent message. Only that chat may ask for it again.
+    CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT, chat TEXT);
     CREATE TABLE IF NOT EXISTS trash (user TEXT PRIMARY KEY, body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS purchases (
       id       INTEGER PRIMARY KEY,
@@ -353,8 +354,8 @@ export function openDatabase(file) {
 
     /** Returns false if the incoming message was handled before. */
     claimMessage: (id) => Number(run('INSERT OR IGNORE INTO messages (id, at) VALUES (?, ?)', `in:${id}`, Date.now()).changes) === 1,
-    saveSent: (id, body) => run('INSERT OR REPLACE INTO messages VALUES (?, ?, ?)', `out:${id}`, Date.now(), body),
-    sent: (id) => get('SELECT body FROM messages WHERE id = ?', `out:${id}`)?.body,
+    saveSent: (id, body, chat) => run('INSERT OR REPLACE INTO messages (id, at, body, chat) VALUES (?, ?, ?, ?)', `out:${id}`, Date.now(), body, chat),
+    sent: (id) => get('SELECT body, chat FROM messages WHERE id = ?', `out:${id}`),
     pruneMessages: () => run('DELETE FROM messages WHERE at < ?', Date.now() - 3 * 86_400_000),
   };
   return store;
@@ -365,6 +366,7 @@ function addMissingColumns(db) {
   const wanted = {
     products: { name: 'TEXT', paused: 'INTEGER NOT NULL DEFAULT 0', min_drop: 'REAL' },
     outbox: { at: 'INTEGER NOT NULL DEFAULT 0', urgent: 'INTEGER NOT NULL DEFAULT 0' },
+    messages: { chat: 'TEXT' },
     settings: { briefing_day: 'INTEGER', briefing_minute: 'INTEGER', briefing_next: 'INTEGER', place: 'TEXT', lat: 'REAL', lon: 'REAL', pending: 'TEXT', calendar_alert: 'INTEGER' },
   };
   for (const [table, columns] of Object.entries(wanted)) {
