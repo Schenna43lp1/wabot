@@ -1,0 +1,7 @@
+# Wer Änderungen prüft. Bei sicherheitskritischen Dateien besonders genau hinsehen.
+*                     @Schenna43lp1
+/src/access.js        @Schenna43lp1
+/src/fetch-page.js    @Schenna43lp1
+/.github/             @Schenna43lp1
+/Dockerfile           @Schenna43lp1
+/package-lock.json    @Schenna43lp1

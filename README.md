@@ -36,6 +36,30 @@ Im laufenden Bot führt `Q` oder `Strg+C` zurück ins Menü. Nach einem Absturz 
 
 Der Bot läuft, solange das Fenster offen und der PC wach ist. Verpasste Prüfungen holt er beim nächsten Start nach.
 
+## Start mit Docker
+
+Für einen Server, NAS oder Raspberry Pi, der ständig läuft. Node.js braucht es dann nicht, aber Docker Compose ab Version 2.24 (`docker compose version`).
+
+1. `.env.example` nach `.env` kopieren und `ALLOWED_NUMBERS` eintragen (ohne Datei geht nur „Nachricht an dich selbst“).
+2. `mkdir -p data` (sonst legt Docker den Ordner für root an und der Bot kann nicht schreiben)
+3. `docker compose up -d --build`
+4. `docker compose logs -f` zeigt den QR-Code. Scannen, dann mit Strg+C die Anzeige verlassen, der Bot läuft weiter.
+
+| Befehl | Wirkung |
+|---|---|
+| `docker compose logs -f` | Log ansehen |
+| `docker compose up -d` | nach einer Änderung an `.env` (`restart` liest sie nicht neu) |
+| `docker compose restart` | neu starten, z. B. nachdem der Bot wartet |
+| `docker compose down` | beenden |
+| `git pull` und `docker compose up -d --build` | aktualisieren |
+
+- Die Daten liegen wie ohne Docker im Ordner `data` neben der `docker-compose.yml`. Eine bestehende Verknüpfung und alle Produkte werden übernommen.
+- Bot **nie gleichzeitig** mit `start.cmd` und in Docker auf denselben Ordner starten: WhatsApp würde die Sitzungen gegenseitig trennen.
+- Die Uhrzeit für Erinnerungen und Briefing ist `Europe/Berlin`. Andere Zone: `TZ=Europe/Vienna` in `.env`.
+- Nach einem Absturz startet Docker den Bot neu. Wird WhatsApp abgemeldet, erscheint im Log von selbst ein neuer QR-Code.
+- Bei Fehlern, die ein Neustart nicht behebt (Tippfehler in `.env`, zweite Instanz, gesperrte Nummer, erneute Abmeldung), startet der Bot nicht endlos neu. Er schreibt die Ursache ins Log und wartet auf `docker compose up -d` oder `restart`.
+- Unter Linux schreibt der Container als Benutzer 1000. Gehört `data` jemand anderem: `sudo chown -R 1000:1000 data`.
+
 ## Welche Nummer?
 
 **Zweite Nummer (empfohlen):** Wähle in der Einrichtung `1`, gib deine normale Nummer ein und scanne den QR-Code mit der Zweitnummer.
@@ -315,17 +339,35 @@ Wiederherstellen:
 
 ```powershell
 npm test
+npm run check -- "<Produktlink>"
 ```
+
+Wie die Teile zusammenspielen und wie man einen Befehl hinzufügt, steht in [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md). Regeln für Änderungen: [CONTRIBUTING.md](CONTRIBUTING.md), Sicherheitslücken: [SECURITY.md](SECURITY.md).
 
 | Datei in `src` | Aufgabe |
 |---|---|
 | `cli.js`, `setup.js` | Startmenü und Einrichtung |
+| `container.js`, `supervise.js` | Start in Docker statt des Menüs, ohne Neustart-Schleifen |
+| `check.js` | Link ohne WhatsApp testen |
+| `config.js` | liest die `.env` |
 | `index.js` | Start und Zeitplan |
+| `exit-codes.js` | warum der Bot endete, für Menü und Docker |
+| `errors.js` | Fehler mit Text für den Nutzer |
 | `whatsapp.js` | Verbindung, Empfang und Versand |
 | `access.js` | wer den Bot benutzen darf |
 | `commands.js` | Chat-Befehle |
 | `help.js` | Hilfetext des Bots |
 | `input.js` | versteht die Eingaben |
+| `when.js` | Zeitangaben wie „morgen halb 9“ und Wiederholungen |
+| `reminders.js` | Erinnerungen |
+| `lists.js` | Einkaufsliste, To-dos, Notizen |
+| `calendar.js`, `ical.js` | Kalender-Anbindung und iCal-Leser |
+| `birthdays.js` | Geburtstage |
+| `briefing.js`, `weather.js` | Morgen-Briefing und Wetter |
+| `expenses.js` | Haushaltsbuch |
+| `calc.js`, `tools.js` | Rechner, Trinkgeld, Umrechnung |
+| `rates.js` | Wechselkurse der EZB |
+| `product.js` | Produktseite laden und auswerten |
 | `messages.js` | Antworttexte zu Produkten |
 | `tracker.js` | Prüfungen und Alarmregeln |
 | `extract.js` | Preiserkennung |

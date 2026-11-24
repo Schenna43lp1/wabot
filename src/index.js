@@ -123,4 +123,4 @@ function tick() {
 tick();
 setInterval(tick, 60_000);
 
-log(`Alltagshelfer gestartet, Preisprüfung alle ${config.intervalMs / 60_000} Minuten. Beenden mit Q.`);
+log(`Alltagshelfer gestartet, Preisprüfung alle ${config.intervalMs / 60_000} Minuten.${process.stdin.isTTY ? ' Beenden mit Q.' : ''}`);

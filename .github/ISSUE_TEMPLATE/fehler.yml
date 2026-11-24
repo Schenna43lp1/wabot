@@ -1,0 +1,43 @@
+name: Fehler melden
+description: Der Bot macht etwas falsch oder stürzt ab.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Keine Telefonnummern, Kalender-Links oder Inhalte aus `data` posten.** Sicherheitslücken bitte privat melden (siehe SECURITY.md).
+  - type: textarea
+    id: was
+    attributes:
+      label: Was ist passiert?
+      description: Welche Nachricht hast du geschickt, was kam zurück?
+      placeholder: "Ich schrieb `erinnere mich morgen 9 an Arzt`, die Antwort war ..."
+    validations:
+      required: true
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Was hast du erwartet?
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Auszug aus dem Bot-Fenster oder `docker compose logs`
+      description: Nummern und Links vorher unkenntlich machen.
+      render: text
+  - type: dropdown
+    id: start
+    attributes:
+      label: Wie läuft der Bot?
+      options:
+        - start.cmd (Windows)
+        - Docker
+        - npm start
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit oder Datum des Stands
+      placeholder: z. B. 436c25e oder „main vom 24.11.“
