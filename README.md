@@ -38,16 +38,18 @@ Der Bot läuft, solange das Fenster offen und der PC wach ist. Verpasste Prüfun
 
 ## Start mit Docker
 
-Für einen Server, NAS oder Raspberry Pi, der ständig läuft. Node.js braucht es dann nicht.
+Für einen Server, NAS oder Raspberry Pi, der ständig läuft. Node.js braucht es dann nicht, aber Docker Compose ab Version 2.24 (`docker compose version`).
 
 1. `.env.example` nach `.env` kopieren und `ALLOWED_NUMBERS` eintragen (ohne Datei geht nur „Nachricht an dich selbst“).
-2. `docker compose up -d --build`
-3. `docker compose logs -f` zeigt den QR-Code. Scannen, dann mit Strg+C die Anzeige verlassen, der Bot läuft weiter.
+2. `mkdir -p data` (sonst legt Docker den Ordner für root an und der Bot kann nicht schreiben)
+3. `docker compose up -d --build`
+4. `docker compose logs -f` zeigt den QR-Code. Scannen, dann mit Strg+C die Anzeige verlassen, der Bot läuft weiter.
 
 | Befehl | Wirkung |
 |---|---|
 | `docker compose logs -f` | Log ansehen |
-| `docker compose restart` | nach einer Änderung an `.env` |
+| `docker compose up -d` | nach einer Änderung an `.env` (`restart` liest sie nicht neu) |
+| `docker compose restart` | neu starten, z. B. nachdem der Bot wartet |
 | `docker compose down` | beenden |
 | `git pull` und `docker compose up -d --build` | aktualisieren |
 
@@ -55,6 +57,7 @@ Für einen Server, NAS oder Raspberry Pi, der ständig läuft. Node.js braucht e
 - Bot **nie gleichzeitig** mit `start.cmd` und in Docker auf denselben Ordner starten: WhatsApp würde die Sitzungen gegenseitig trennen.
 - Die Uhrzeit für Erinnerungen und Briefing ist `Europe/Berlin`. Andere Zone: `TZ=Europe/Vienna` in `.env`.
 - Nach einem Absturz startet Docker den Bot neu. Wird WhatsApp abgemeldet, erscheint im Log von selbst ein neuer QR-Code.
+- Bei Fehlern, die ein Neustart nicht behebt (Tippfehler in `.env`, zweite Instanz, gesperrte Nummer, erneute Abmeldung), startet der Bot nicht endlos neu. Er schreibt die Ursache ins Log und wartet auf `docker compose up -d` oder `restart`.
 - Unter Linux schreibt der Container als Benutzer 1000. Gehört `data` jemand anderem: `sudo chown -R 1000:1000 data`.
 
 ## Welche Nummer?
@@ -344,7 +347,7 @@ Wie die Teile zusammenspielen und wie man einen Befehl hinzufügt, steht in [doc
 | Datei in `src` | Aufgabe |
 |---|---|
 | `cli.js`, `setup.js` | Startmenü und Einrichtung |
-| `container.js` | Start in Docker statt des Menüs |
+| `container.js`, `supervise.js` | Start in Docker statt des Menüs, ohne Neustart-Schleifen |
 | `check.js` | Link ohne WhatsApp testen |
 | `config.js` | liest die `.env` |
 | `index.js` | Start und Zeitplan |

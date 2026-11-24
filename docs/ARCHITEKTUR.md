@@ -25,7 +25,7 @@ flowchart LR
 | Weg | Einstieg | Wofür |
 |---|---|---|
 | `start.cmd` | `cli.js` → `index.js` | Windows-Menü, fragt bei Abmeldung und Absturz nach |
-| Docker | `container.js` → `index.js` | Server, startet nach Abmeldung selbst mit neuem QR-Code |
+| Docker | `container.js` → `index.js` | Server. `supervise.js` zeigt nach einer Abmeldung einen neuen QR-Code und wartet bei Fehlern, die ein Neustart nicht behebt |
 | `npm start` | `index.js` | Entwicklung |
 | `npm run check -- <Link>` | `check.js` | einen Shop-Link ohne WhatsApp testen |
 

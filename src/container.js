@@ -1,9 +1,12 @@
 // Entry point in Docker, where the start menu cannot ask questions.
 // Used instead of the menu, so no npm packages in here.
 import { spawn } from 'node:child_process';
+import { accessSync, constants, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { EXIT } from './exit-codes.js';
 import { readSettings, resetLink } from './setup.js';
+import { supervise } from './supervise.js';
 
 const ROOT = join(import.meta.dirname, '..');
 const log = (text) => process.stdout.write(`[${new Date().toLocaleString('de-DE')}] ${text}\n`);
@@ -21,21 +24,38 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
 function run() {
   return new Promise((done) => {
     child = spawn(process.execPath, [join(import.meta.dirname, 'index.js')], { cwd: ROOT, stdio: 'inherit' });
-    child.on('error', () => done(1));
-    child.on('exit', (code, signal) => done(code ?? (signal ? 1 : 0)));
+    const finish = (code) => {
+      child = undefined;
+      done(stopping ? null : code);
+    };
+    child.on('error', () => finish(1));
+    child.on('exit', (code) => finish(code ?? 1));
   });
 }
 
-for (;;) {
-  const code = await run();
-  child = undefined;
-  // Without this the old session fails again on every restart. A new QR code
-  // only links the device the owner scans it with, so it is safe to show.
-  if (code === EXIT.loggedOut && !stopping) {
-    resetLink(readSettings(ROOT).dataDir);
-    log('Neuer QR-Code folgt. Die alte Verknüpfung liegt in data/auth-alt-…');
-    continue;
+function checkData() {
+  let dataDir;
+  try {
+    dataDir = readSettings(ROOT).dataDir;
+  } catch (error) {
+    throw new Error(`Fehler in .env: ${error.message}`);
   }
-  // Everything else Docker handles: restart after a crash, stop after "docker compose down".
-  process.exit(code);
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    accessSync(dataDir, constants.W_OK);
+  } catch {
+    // Docker creates a missing bind-mount folder as root, the bot runs as user 1000.
+    throw new Error('Der Ordner data ist nicht beschreibbar. Auf dem Host: sudo chown -R 1000:1000 data, dann docker compose restart');
+  }
 }
+
+await supervise({
+  run,
+  relink: () => resetLink(readSettings(ROOT).dataDir),
+  checkData,
+  log,
+  // Waits for "docker compose restart" or "down" instead of a restart loop.
+  idle: () => new Promise(() => setInterval(() => {}, 2 ** 30)),
+  exit: (code) => process.exit(code),
+  sleep,
+});
