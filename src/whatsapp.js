@@ -259,7 +259,7 @@ export async function startWhatsApp({
     if (!online) throw new Error('offline');
     for (const part of splitText(text)) {
       const sent = await sock.sendMessage(jid, { text: MARK + part });
-      remember(sent);
+      remember(sent, jid);
     }
   }
 
@@ -268,7 +268,7 @@ export async function startWhatsApp({
     const sent = await sock.sendMessage(jid, {
       document: file.data, fileName: file.name, mimetype: file.mimetype, caption: MARK + text,
     });
-    remember(sent);
+    remember(sent, jid);
   }
 
   async function sendImage(jid, { text, image }) {
@@ -282,11 +282,12 @@ export async function startWhatsApp({
       // Baileys needs sharp or jimp for a preview. Without one the phone loads the full image.
       jpegThumbnail: '',
     });
-    remember(sent);
+    remember(sent, jid);
   }
 
-  function remember(sent) {
-    if (sent?.key.id) db.saveSent(sent.key.id, JSON.stringify(sent.message, BufferJSON.replacer), sent.key.remoteJid);
+  // The chat we sent to, so only that chat may ask for the message again.
+  function remember(sent, jid) {
+    if (sent?.key.id) db.saveSent(sent.key.id, JSON.stringify(sent.message, BufferJSON.replacer), jid);
   }
 
   async function flush() {

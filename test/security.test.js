@@ -54,3 +54,40 @@ test('a voice message is too long by its header, before decoding', async () => {
   assert.equal(oggSeconds(page), 600);
   assert.equal(oggSeconds(Buffer.from('nothing')), 0);
 });
+
+test('WhatsApp gives a sent message again only to its chat', async (t) => {
+  const { EventEmitter } = await import('node:events');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { startWhatsApp } = await import('../src/whatsapp.js');
+  const { setup } = await import('./helpers.js');
+  const { db, config, handle } = setup({ ALLOWED_NUMBERS: '491701234567' });
+  config.dataDir = mkdtempSync(join(tmpdir(), 'resend-test-'));
+  let options;
+  const socket = {
+    ev: new EventEmitter(),
+    user: { id: '491700000000:1@s.whatsapp.net' },
+    signalRepository: { lidMapping: { getPNForLID: async () => null } },
+    end() {},
+    // Like Baileys, but without remoteJid in the key.
+    sendMessage: async (to, content) => ({ key: { id: 'out1' }, message: { conversation: content.text } }),
+  };
+  const createSocket = (given) => {
+    options = given;
+    return socket;
+  };
+  const bot = await startWhatsApp({ db, config, handle, log() {}, onFatal: assert.fail, createSocket });
+  t.after(() => {
+    bot.stop();
+    rmSync(config.dataDir, { recursive: true, force: true });
+  });
+  socket.ev.emit('connection.update', { connection: 'open' });
+  db.queue('491701234567', 'Geheim', { urgent: true });
+  await bot.flush();
+  assert.equal(db.queued().length, 0);
+
+  const friend = await options.getMessage({ id: 'out1', remoteJid: '491701234567:2@s.whatsapp.net' });
+  assert.match(friend.conversation, /Geheim/);
+  assert.equal(await options.getMessage({ id: 'out1', remoteJid: '499999999999@s.whatsapp.net' }), undefined);
+});
