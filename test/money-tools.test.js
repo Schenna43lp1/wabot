@@ -246,7 +246,8 @@ test('birthdays: save, change, list by next date, delete and undo', async () => 
   assert.match(await handle(U, 'rückgängig'), /wieder da: \*Max\*/);
   assert.equal(await handle(U, 'geburtstag Anna'), '🎂 *Anna*: 13.03., nächstes Mal am Sa 13.03., in 110 Tagen (wird 37)');
   assert.match(await handle(U, 'wann hat anna geburtstag?'), /\*Anna\*: 13\.03\./);
-  assert.match(await handle(U, 'geburtstag Zoe'), /So geht es/);
+  assert.match(await handle(U, 'geburtstag Zoe'), /Von \*Zoe\* kenne ich keinen Geburtstag/);
+  assert.match(await handle(U, 'geburtstag 12345'), /So geht es/);
   assert.equal(await handle(U, 'Geburtstag von Tim planen', { quiet: true }), null);
 });
 

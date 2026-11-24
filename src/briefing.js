@@ -126,6 +126,7 @@ export function createBriefing({ db, weather, calendar, birthdays, lists, now = 
 
   async function weatherNow(user, value, quiet) {
     let where = db.settings(user);
+    const tomorrowFirst = /(?<!\p{L})morgen(?!\p{L})/iu.test(value);
     // "wetter morgen", "wetter in Graz": the forecast always covers today and tomorrow.
     value = value.trim().replace(/[!?.]+$/, '')
       .replace(/(?:^|\s+)(?:heute|morgen|jetzt|gerade|aktuell|am wochenende)(?=\s|$)/gi, '')
@@ -138,7 +139,7 @@ export function createBriefing({ db, weather, calendar, birthdays, lists, now = 
     } else if (where?.lat == null) {
       return quiet ? null : 'Für welchen Ort? Speichere ihn einmal mit `ort Wien`, dann reicht `wetter`.\nOder einmalig: `wetter Graz`';
     }
-    return weatherText(where.place, await weather.forecast(where));
+    return weatherText(where.place, await weather.forecast(where), { tomorrowFirst });
   }
 
   return { compose, briefing, place, weather: weatherNow };

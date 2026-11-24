@@ -109,7 +109,13 @@ export function createBirthdays({ db, now = Date.now }) {
       // "geburtstag anna" without a date looks it up.
       const found = lookUp(user, text, at);
       if (found) return found;
-      return quiet ? null : 'So geht es: `geburtstag Anna 12.3.1990` oder ohne Jahr `geburtstag Anna 12.3.`';
+      if (quiet) return null;
+      // "wann hat Anna Geburtstag" for someone not saved yet
+      const name = text.replace(/^(?:von|für)\s+/i, '');
+      if (/^\p{L}[\p{L}' -]{1,40}$/u.test(name) && name.split(/\s+/).length <= 3) {
+        return `🎂 Von *${name}* kenne ich keinen Geburtstag.\nSpeichern: \`geburtstag ${name} 12.3.\` oder mit Jahr \`geburtstag ${name} 12.3.1990\``;
+      }
+      return 'So geht es: `geburtstag Anna 12.3.1990` oder ohne Jahr `geburtstag Anna 12.3.`';
     }
     if (parsed.error) return quiet ? null : parsed.error;
 

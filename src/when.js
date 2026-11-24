@@ -9,6 +9,9 @@ const NUMBERS = {
   ein: 1, eine: 1, einer: 1, einem: 1, einen: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, fuenf: 5, sechs: 6,
   sieben: 7, acht: 8, neun: 9, zehn: 10, elf: 11, zwölf: 12, zwoelf: 12, zwanzig: 20, dreißig: 30, dreissig: 30,
 };
+// Only for amounts: "in anderthalb Stunden"
+const FRACTIONS = { anderthalb: 1.5, eineinhalb: 1.5, zweieinhalb: 2.5, dreieinhalb: 3.5 };
+const MONTHS = ['januar', 'februar', 'märz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
 const UNITS = {
   m: 'minute', min: 'minute', mins: 'minute', minute: 'minute', minuten: 'minute',
   h: 'hour', std: 'hour', stunde: 'hour', stunden: 'hour',
@@ -23,8 +26,13 @@ const DAY_PARTS = {
   früh: 8 * 60, frueh: 8 * 60, morgens: 8 * 60, vormittag: 10 * 60, vormittags: 10 * 60, mittag: 12 * 60, mittags: 12 * 60,
   nachmittag: 15 * 60, nachmittags: 15 * 60, abend: 19 * 60, abends: 19 * 60, nacht: 22 * 60, nachts: 22 * 60,
 };
-// Words between the time and the text: "morgen 9 an den Arzt"
-const FILLER = /^(?:an|ans|daran|dass|das|zu|:|-|–)$/i;
+// Words between the time and the text: "morgen 9 an den Arzt", "daran, dass …"
+const FILLER = /^(?:an|ans|daran|dran|dass|das|zu|:|-|–)$/i;
+// Spoken requests: "erinnere mich bitte morgen", "erinner mich doch mal …"
+const SOFTENER = /^(?:bitte|doch|mal|noch|einfach)$/i;
+// Separable verbs in a "zu" clause: "anzurufen" → "anrufen"
+const ZU_VERB = /^(ab|an|auf|aus|bei|ein|fest|her|hin|los|mit|nach|vor|weg|zurück|zusammen|um|rein|raus|rüber|runter|hoch|weiter|heim|durch|sauber|frei)zu(\p{L}{2,}en)$/iu;
+const MODAL = /^(?:muss|musst|soll|sollte|will|möchte|wollte|darf|kann|werde)$/i;
 const MAX_DAYS_AHEAD = 5 * 366;
 // Nobody means "um 3" at night: before 8 a time without a day may be the afternoon.
 const EARLY = 8 * 60;
@@ -40,6 +48,7 @@ function amountOf(token) {
   const text = word(token);
   if (!text) return null;
   if (NUMBERS[text]) return NUMBERS[text];
+  if (FRACTIONS[text]) return FRACTIONS[text];
   if (/^\d{1,4}(?:[.,]\d)?$/.test(text)) return Number(text.replace(',', '.'));
   return null;
 }
@@ -88,27 +97,71 @@ function readClock(tokens, i, { needsMark }) {
     hasUhr = true;
     at++;
   }
+  // "9 Uhr 30", as people say it
+  let total = minute;
+  const minutes = hasUhr && minute % 60 === 0 ? bare(tokens[at])?.match(/^\d{1,2}$/) : null;
+  if (minutes && Number(minutes[0]) < 60) {
+    total += Number(minutes[0]);
+    at++;
+  }
   // "3 Brote" is not a time. "um 3", "3 uhr" and "3:00" are.
   if (needsMark && !marked && !hasUhr && !/[:.]/.test(raw)) return null;
   // "um 3" in the afternoon means 15:00.
-  return { minute, end: at, ambiguous: minute >= 60 && minute < EARLY };
+  return { minute: total, end: at, ambiguous: total >= 60 && total < EARLY };
 }
 
-/** A clock time or "abends". */
+/** "8" with "abends" is 20:00, with "morgens" 8:00, "11 nachts" is 23:00 and "2 nachts" 2:00. */
+function inPart(minute, part) {
+  if (minute >= 12 * 60) return minute;
+  const later = minute + 12 * 60;
+  if (part === DAY_PARTS.nacht) return minute >= 6 * 60 ? later : minute;
+  if (part === DAY_PARTS.mittag) return minute < 3 * 60 ? later : minute;
+  return part >= DAY_PARTS.nachmittag ? later : minute;
+}
+
+/** A clock time or "abends", or both: "abends um 8", "um 8 Uhr abends". */
 function readTimeOfDay(tokens, i, options) {
   const part = DAY_PARTS[bare(tokens[i])];
-  if (part != null) return { minute: part, end: i + 1 };
-  return readClock(tokens, i, options);
+  if (part != null) {
+    const clock = readClock(tokens, i + 1, { needsMark: true });
+    if (clock) return { minute: inPart(clock.minute, part), end: clock.end };
+    return { minute: part, end: i + 1 };
+  }
+  const clock = readClock(tokens, i, options);
+  const after = clock && DAY_PARTS[bare(tokens[clock.end])];
+  if (after != null) return { minute: inPart(clock.minute, after), end: clock.end + 1 };
+  return clock;
 }
 
-/** "24.12.", "24.12.2026", "am 24.12" */
+/** "dezember", "dez", "dez." */
+function monthOf(token) {
+  const text = bare(token)?.replace('maerz', 'märz');
+  if (!text || text.length < 3) return -1;
+  return MONTHS.findIndex((month) => month === text || (text.length <= 4 && month.startsWith(text)));
+}
+
+/** "24.12.", "24.12.2026", "am 24.12", "24. Dezember", "am 24 Dez 2027" */
 function readDate(tokens, i, now) {
   let at = i;
   const marked = bare(tokens[at]) === 'am';
   if (marked) at++;
+  let day;
+  let month;
+  let year;
   const match = word(tokens[at])?.match(marked ? /^(\d{1,2})\.(\d{1,2})\.?(\d{2}|\d{4})?$/ : /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})?$/);
-  if (!match) return null;
-  const [, day, month, year] = match.map(Number);
+  if (match) [, day, month, year] = match.map(Number);
+  else {
+    const named = word(tokens[at])?.match(marked ? /^(\d{1,2})\.?$/ : /^(\d{1,2})\.$/);
+    const index = named ? monthOf(tokens[at + 1]) : -1;
+    if (index < 0) return null;
+    [day, month] = [Number(named[1]), index + 1];
+    at++;
+    const written = bare(tokens[at + 1])?.match(/^\d{4}$/);
+    if (written) {
+      year = Number(written[0]);
+      at++;
+    }
+  }
   const today = new Date(now);
   let fullYear = year ? (year < 100 ? 2000 + year : year) : today.getFullYear();
   const date = () => new Date(fullYear, month - 1, day);
@@ -162,11 +215,17 @@ function readRelative(tokens, i, now) {
     amount = amountOf(tokens[pos]);
     if (amount == null) return null;
     pos++;
-    if (/^halbe[nr]?$/.test(bare(tokens[pos]) ?? '')) {
-      amount /= 2;
+    // "einer halben Stunde", "einer viertel Stunde", "einer Viertelstunde"
+    const part = { halbe: 1 / 2, halben: 1 / 2, halber: 1 / 2, viertel: 1 / 4, dreiviertel: 3 / 4 }[bare(tokens[pos])];
+    if (part) {
+      amount *= part;
       pos++;
     }
-    unit = UNITS[bare(tokens[pos])];
+    const quarters = bare(tokens[pos])?.match(/^(drei)?viertelstunden?$/);
+    if (quarters) {
+      amount *= quarters[1] ? 45 : 15;
+      unit = 'minute';
+    } else unit = UNITS[bare(tokens[pos])];
     if (!unit) return null;
     pos++;
   }
@@ -301,11 +360,40 @@ function readWhen(tokens, i, now) {
   return { due, end: time.end };
 }
 
-function cleanText(tokens) {
+/**
+ * The reminder without the words around it. A clause, as in "daran, die Wäsche aufzuhängen"
+ * or "morgen, dass ich Anna anrufen muss", becomes "die Wäsche aufhängen" and "Anna anrufen".
+ */
+function cleanText(tokens, { clause = false } = {}) {
   const words = [...tokens];
-  while (words.length && FILLER.test(words[0])) words.shift();
-  while (words.length && FILLER.test(words.at(-1))) words.pop();
-  return words.join(' ').replace(/^[,:\s–-]+|[,:\s–-]+$/g, '').trim();
+  const filler = (token) => FILLER.test(token.replace(/,$/, ''));
+  if (/^(?:daran|dran|dass),?$/i.test(words[0] ?? '')) clause = true;
+  while (words.length && filler(words[0])) words.shift();
+  while (words.length && filler(words.at(-1))) words.pop();
+  if (clause && words.length > 1) {
+    if (/^(?:ich|wir)$/i.test(words[0])) {
+      words.shift();
+      if (words.length > 1 && MODAL.test(words.at(-1))) words.pop();
+    }
+    const verb = words.at(-1).match(ZU_VERB);
+    if (verb) words[words.length - 1] = verb[1] + verb[2];
+    else if (words.length > 2 && /^zu$/i.test(words.at(-2)) && /\p{L}{2,}en$/u.test(words.at(-1))) words.splice(-2, 1);
+  }
+  // "an die Tabletten?" as Whisper sometimes writes it
+  return words.join(' ').replace(/^[,:\s–-]+|[,:\s–-]+$|[?!.]+$/g, '').trim();
+}
+
+/** "mich bitte morgen …" → "morgen …". "mich daran, morgen …" makes the rest a clause. */
+function requestTokens(input) {
+  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  if (/^(mich|uns),?$/i.test(tokens[0] ?? '')) tokens.shift();
+  while (tokens.length > 1 && SOFTENER.test(tokens[0].replace(/,$/, ''))) tokens.shift();
+  let clause = false;
+  if (tokens.length > 2 && /^(?:daran|dran),$/i.test(tokens[0])) {
+    tokens.shift();
+    clause = true;
+  }
+  return { tokens, clause };
 }
 
 /**
@@ -313,14 +401,13 @@ function cleanText(tokens) {
  * Returns { text, due } or { text, rule } or { error } or null when no time was found.
  */
 export function parseReminder(input, now) {
-  const tokens = input.trim().split(/\s+/).filter(Boolean);
-  if (/^(mich|uns)$/i.test(tokens[0] ?? '')) tokens.shift();
+  const { tokens, clause } = requestTokens(input);
   if (!tokens.length) return null;
 
   let found = readWhen(tokens, 0, now);
   let text;
   if (found && found.end < tokens.length) {
-    text = cleanText(tokens.slice(found.end));
+    text = cleanText(tokens.slice(found.end), { clause: clause || tokens[found.end - 1].endsWith(',') });
   } else {
     found = null;
     // The time at the end: "an den Arzt morgen 9". The longest ending that is a time wins.
@@ -328,7 +415,7 @@ export function parseReminder(input, now) {
       const tail = readWhen(tokens, i, now);
       if (tail && tail.end === tokens.length) {
         found = tail;
-        text = cleanText(tokens.slice(0, i));
+        text = cleanText(tokens.slice(0, i), { clause });
       }
     }
   }
@@ -360,9 +447,8 @@ export function parseLater(input, now) {
 
 /** The text of "erinnere mich an den Arzt" without the filler words. */
 export function reminderText(input) {
-  const tokens = input.trim().split(/\s+/).filter(Boolean);
-  if (/^(mich|uns)$/i.test(tokens[0] ?? '')) tokens.shift();
-  return cleanText(tokens);
+  const { tokens, clause } = requestTokens(input);
+  return cleanText(tokens, { clause });
 }
 
 /** The first time of the rule after `after`. */

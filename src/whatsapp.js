@@ -20,8 +20,15 @@ const DELAYED_MS = 30 * 60_000;
 const KEYS = process.stdin.isTTY;
 const ONLY_TEXT = 'Ich kann nur Text lesen. Schick mir den Produktlink als Nachricht, am schnellsten über „Teilen“ im Shop.';
 const NO_SPEECH = '🎤 Sprachnachrichten verstehe ich noch nicht, bitte schreib mir. Einschalten lässt sich das am PC des Bots (README, „Sprachnachrichten“).';
-const NOT_HEARD = '🎤 Ich habe in der Sprachnachricht nichts verstanden. Sprich bitte etwas lauter oder schreib mir.';
-const TOO_LONG = `🎤 Die Sprachnachricht ist zu lang. Ich höre mir höchstens ${MAX_SECONDS / 60} Minuten an.`;
+const NOT_HEARD = '🎤 Ich habe in der Sprachnachricht keine Worte verstanden. Sprich bitte etwas näher am Handy oder schreib mir.';
+const TOO_LONG = `🎤 Die Sprachnachricht ist zu lang. Ich höre mir höchstens ${MAX_SECONDS / 60} Minuten an, kurze Sätze klappen am besten.`;
+const SPEECH_FAILED = {
+  format: '🎤 Diese Audiodatei kann ich nicht abspielen. Ich verstehe Sprachnachrichten, die du direkt in WhatsApp aufnimmst.',
+  load: '🎤 Mein Sprachmodell lässt sich gerade nicht laden, bitte schreib mir. Details stehen im Bot-Fenster.',
+  long: TOO_LONG,
+  download: '🎤 Die Sprachnachricht konnte ich nicht herunterladen. Schick sie bitte noch einmal.',
+};
+const LOADING = '🎤 Einen Moment, ich lade beim ersten Mal noch das Sprachmodell …';
 
 const DISCONNECTED = {
   405: 'WhatsApp lehnt diese Bot-Version ab (siehe README, Probleme)',
@@ -155,8 +162,8 @@ export async function startWhatsApp({
       return;
     }
     const voice = !text && content?.audioMessage ? content.audioMessage : null;
-    // In the self-chat photos and voice messages are notes, unless the bot can listen.
-    if (!text && sender.self && !(voice && transcribe)) return;
+    // In the self-chat photos, audio files and voice messages are notes, unless the bot can listen to voice.
+    if (!text && sender.self && !(voice && voice.ptt !== false && transcribe)) return;
     if (!db.claimMessage(`${sender.user}:${key.id}`)) return;
 
     // One message after the other per user.
@@ -193,14 +200,28 @@ export async function startWhatsApp({
   async function listen(socket, raw, voice, sender) {
     const quiet = sender.self;
     if (!transcribe) return NO_SPEECH;
-    if (Number(voice.seconds) > MAX_SECONDS) return quiet ? null : TOO_LONG;
-    let heard;
+    // Two minutes of WhatsApp voice are about 300 KB. Anything far bigger is no voice message.
+    if (Number(voice.seconds) > MAX_SECONDS || Number(voice.fileLength) > 5_000_000) return quiet ? null : TOO_LONG;
+    let audio;
     try {
-      heard = cleanTranscript(await transcribe(await download(raw, socket)));
+      audio = await download(raw, socket);
+    } catch (error) {
+      log(`Sprachnachricht nicht heruntergeladen: ${error.message}`);
+      return quiet ? null : SPEECH_FAILED.download;
+    }
+    // Only the very first voice message after the start waits for the model.
+    if (!quiet && transcribe.isReady?.() === false) await answer(sender, LOADING);
+    let heard;
+    const started = now();
+    try {
+      heard = cleanTranscript(await transcribe(audio));
     } catch (error) {
       log(`Sprachnachricht nicht verstanden: ${error.message}`);
-      return quiet ? null : NOT_HEARD;
+      return quiet ? null : (SPEECH_FAILED[error.kind] ?? NOT_HEARD);
     }
+    // How long it took, never what was said.
+    const took = ((now() - started) / 1000).toFixed(1).replace('.', ',');
+    log(`🎤 Sprachnachricht (${Number(voice.seconds) || '?'} s) ${heard ? 'verstanden' : 'ohne erkennbare Worte'} in ${took} s.`);
     if (!heard) return quiet ? null : NOT_HEARD;
     // In the self-chat a voice memo that is no command stays a memo.
     const reply = await handle(sender.user, heard, { quiet });

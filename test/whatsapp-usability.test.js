@@ -87,6 +87,8 @@ test('voice messages with speech recognition are handled like typed text', async
   receive(FRIEND, voice('a'));
   await sleep(80);
   assert.deepEqual(sent, ['🤖 🎤 _„Was muss ich einkaufen?“_\n\n🛒 Milch']);
+  assert.ok(logs.some((line) => /^🎤 Sprachnachricht \(3 s\) verstanden in \d+,\d s\.$/.test(line)), 'the log says how long it took');
+  assert.ok(!logs.some((line) => line.includes('einkaufen')), 'but never what was said');
 
   sent.length = 0;
   receive(ME, voice('a'), true);
@@ -103,12 +105,54 @@ test('voice messages with speech recognition are handled like typed text', async
   receive(FRIEND, voice('d'));
   receive('499999999999', voice('a'));
   await sleep(120);
-  assert.match(sent[0], /nichts verstanden/, 'invented subtitles');
+  assert.match(sent[0], /keine Worte verstanden/, 'invented subtitles');
   assert.match(sent[1], /zu lang/);
-  assert.match(sent[2], /nichts verstanden/);
+  assert.match(sent[2], /nicht herunterladen/);
   assert.match(sent[3], /echo um 9/, 'spoken numbers as digits');
   assert.equal(sent.length, 4, 'strangers get nothing');
   assert.ok(logs.some((line) => line.includes('download failed')));
+
+  // An audio file sent to oneself is no voice memo for the bot.
+  sent.length = 0;
+  calls.length = 0;
+  receive(ME, { audioMessage: { url: 'a', seconds: 3, ptt: false } }, true);
+  await sleep(60);
+  assert.equal(calls.length, 0);
+});
+
+test('voice messages: each problem gets its own answer, the first one waits for the model', async (t) => {
+  const failures = { format: 'format', load: 'load', long: 'long' };
+  let ready = false;
+  const transcribe = async (buffer) => {
+    const kind = failures[buffer.toString()];
+    if (kind) throw Object.assign(new Error(kind), { kind });
+    ready = true;
+    return 'Hilfe';
+  };
+  transcribe.isReady = () => ready;
+  const { sent, receive } = await start(t, {
+    transcribe,
+    download: async (message) => Buffer.from(message.message.audioMessage.url),
+    handle: async (user, text) => `echo ${text}`,
+  });
+  const voice = (url) => ({ audioMessage: { url, seconds: 3, ptt: true } });
+
+  receive(FRIEND, voice('ok'));
+  await sleep(80);
+  assert.match(sent[0], /lade beim ersten Mal noch das Sprachmodell/);
+  assert.match(sent[1], /echo Hilfe/);
+
+  sent.length = 0;
+  receive(FRIEND, voice('ok'));
+  receive(FRIEND, voice('format'));
+  receive(FRIEND, voice('load'));
+  receive(FRIEND, voice('long'));
+  await sleep(120);
+  assert.equal(sent.length, 4, 'the model message comes only once');
+  assert.match(sent[0], /echo Hilfe/);
+  assert.match(sent[1], /Audiodatei kann ich nicht abspielen/);
+  assert.match(sent[2], /Sprachmodell lässt sich gerade nicht laden/);
+  assert.match(sent[3], /zu lang/);
 });
 
 test('window explains which number writes to which', async (t) => {

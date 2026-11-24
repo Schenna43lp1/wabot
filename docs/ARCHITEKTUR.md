@@ -33,7 +33,13 @@ flowchart LR
 
 ## Eine Nachricht von Anfang bis Ende
 
-1. **Empfang** (`whatsapp.js`): nur Text bis 4000 Zeichen, nicht älter als ein Tag, nicht von vor der Installation. Eigene Antworten beginnen mit `🤖 ` und werden übersprungen, damit der Chat „Nachricht an dich selbst“ nicht mit sich selbst redet. Sprachnachrichten werden, wenn die Spracherkennung installiert ist, heruntergeladen, in `speech.js` lokal mit Whisper transkribiert und mit `cleanTranscript` aufbereitet (Zahlwörter, erfundene Untertitel). Danach laufen sie wie getippter Text weiter.
+1. **Empfang** (`whatsapp.js`): nur Text bis 4000 Zeichen, nicht älter als ein Tag, nicht von vor der Installation. Eigene Antworten beginnen mit `🤖 ` und werden übersprungen, damit der Chat „Nachricht an dich selbst“ nicht mit sich selbst redet. Sprachnachrichten laufen, wenn die Spracherkennung installiert ist, so durch `speech.js`:
+   - Prüfen, ob es Ogg Opus ist (sonst Fehlerart `format`), dekodieren, auf einen Kanal mit 16 kHz bringen.
+   - `findSpeech`: Pegel in 30-ms-Stücken nach einem Hochpass bei 300 Hz. Ist der Abstand zwischen leisen und lauten Stücken unter 10 dB, ist es keine Sprache (Stille, Rauschen, Töne); Whisper würde dort Sätze erfinden. Sonst wird die Stille davor und danach abgeschnitten.
+   - `louder` hebt leise Aufnahmen an, dann transkribiert Whisper.
+   - `cleanTranscript`: erfundene Untertitel und Wiederholungen weg, „äh“ weg, typische Hörfehler korrigiert (`MISHEARD`), Zahlwörter zu Ziffern, „12 Euro 50“ → `12,50 Euro`.
+
+   Danach läuft der Text wie getippter weiter. Fehler haben eine Art (`format`, `load`, `long`), damit `whatsapp.js` passend antwortet.
 2. **Zugriff** (`access.js`): Gruppen, fremde Nummern und Chats des Besitzers mit anderen ergeben `null`. Ergebnis ist `{ user, chat, self }`, wobei `user` immer die Telefonnummer ist, auch wenn WhatsApp eine LID schickt.
 3. **Einmal verarbeiten:** `db.claimMessage` verhindert doppelte Antworten, wenn WhatsApp eine Nachricht erneut zustellt. Pro Nutzer läuft eine Nachricht nach der anderen.
 4. **Befehl** (`commands.js` → `handle`):
@@ -129,6 +135,8 @@ Alles Laden geht über `src/fetch-page.js`:
 | Deutsche Befehle mit freiem Satzbau | fühlt sich an wie eine Nachricht an einen Menschen | Parser muss Notizen von Befehlen trennen |
 | Sätze per Regeln (`phrases.js`), kein Sprachmodell | vorhersehbar, schnell, testbar, keine Daten nach außen | jede Satzform muss einzeln eingetragen werden |
 | Spracherkennung lokal mit Whisper, als Zusatz in `speech/` | Aufnahmen bleiben auf dem PC; wer sie nicht will, lädt keine 500 MB | erster Start lädt 80 MB, Docker-Image dann mit Debian statt Alpine |
+| Whisper `base` als Standard | mit Testaufnahmen gemessen: `small` war kaum genauer, aber 2,5-mal langsamer | eigene Wörter wie Namen erkennt es schlechter |
+| Sprache per Pegel erkennen statt mit einem eigenen Modell | keine weiteren Pakete, in Millisekunden | sehr lauter, gleichmäßiger Lärm über der Stimme gilt als „nichts gehört“ |
 
 ## Einen Befehl hinzufügen
 
