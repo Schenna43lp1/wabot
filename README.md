@@ -36,6 +36,27 @@ Im laufenden Bot führt `Q` oder `Strg+C` zurück ins Menü. Nach einem Absturz 
 
 Der Bot läuft, solange das Fenster offen und der PC wach ist. Verpasste Prüfungen holt er beim nächsten Start nach.
 
+## Start mit Docker
+
+Für einen Server, NAS oder Raspberry Pi, der ständig läuft. Node.js braucht es dann nicht.
+
+1. `.env.example` nach `.env` kopieren und `ALLOWED_NUMBERS` eintragen (ohne Datei geht nur „Nachricht an dich selbst“).
+2. `docker compose up -d --build`
+3. `docker compose logs -f` zeigt den QR-Code. Scannen, dann mit Strg+C die Anzeige verlassen, der Bot läuft weiter.
+
+| Befehl | Wirkung |
+|---|---|
+| `docker compose logs -f` | Log ansehen |
+| `docker compose restart` | nach einer Änderung an `.env` |
+| `docker compose down` | beenden |
+| `git pull` und `docker compose up -d --build` | aktualisieren |
+
+- Die Daten liegen wie ohne Docker im Ordner `data` neben der `docker-compose.yml`. Eine bestehende Verknüpfung und alle Produkte werden übernommen.
+- Bot **nie gleichzeitig** mit `start.cmd` und in Docker auf denselben Ordner starten: WhatsApp würde die Sitzungen gegenseitig trennen.
+- Die Uhrzeit für Erinnerungen und Briefing ist `Europe/Berlin`. Andere Zone: `TZ=Europe/Vienna` in `.env`.
+- Nach einem Absturz startet Docker den Bot neu. Wird WhatsApp abgemeldet, erscheint im Log von selbst ein neuer QR-Code.
+- Unter Linux schreibt der Container als Benutzer 1000. Gehört `data` jemand anderem: `sudo chown -R 1000:1000 data`.
+
 ## Welche Nummer?
 
 **Zweite Nummer (empfohlen):** Wähle in der Einrichtung `1`, gib deine normale Nummer ein und scanne den QR-Code mit der Zweitnummer.
@@ -320,6 +341,7 @@ npm test
 | Datei in `src` | Aufgabe |
 |---|---|
 | `cli.js`, `setup.js` | Startmenü und Einrichtung |
+| `container.js` | Start in Docker statt des Menüs |
 | `index.js` | Start und Zeitplan |
 | `whatsapp.js` | Verbindung, Empfang und Versand |
 | `access.js` | wer den Bot benutzen darf |

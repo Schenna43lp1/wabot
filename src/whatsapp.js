@@ -15,6 +15,8 @@ const DAY_MS = 86_400_000;
 const TYPING_AFTER_MS = 600;
 // Older messages say when they were written: the price may have moved since.
 const DELAYED_MS = 30 * 60_000;
+// Only a terminal window has the Q key, in Docker there is none.
+const KEYS = process.stdin.isTTY;
 const ONLY_TEXT = 'Ich kann nur Text lesen. Schick mir den Produktlink als Nachricht, am schnellsten über „Teilen“ im Shop.';
 
 const DISCONNECTED = {
@@ -76,7 +78,7 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
         if (process.stdout.isTTY) console.clear();
         log('QR-Code scannen: WhatsApp → Verknüpfte Geräte → Gerät hinzufügen');
         qrcode.generate(qr, { small: true }, (code) => process.stdout.write(`${code}\n`));
-        process.stdout.write('Code unvollständig? Fenster maximieren. Er erneuert sich von selbst. Q = beenden\n');
+        process.stdout.write(`Code unvollständig? Fenster maximieren. Er erneuert sich von selbst.${KEYS ? ' Q = beenden' : ''}\n`);
       }
       if (connection === 'open') {
         online = true;
@@ -84,7 +86,7 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
         // Only remove a QR code, after a reconnect the log should stay.
         if (showingQr && process.stdout.isTTY) console.clear();
         showingQr = false;
-        log('✔ WhatsApp ist verbunden. Fenster offen lassen, beenden mit Q.');
+        log(KEYS ? '✔ WhatsApp ist verbunden. Fenster offen lassen, beenden mit Q.' : '✔ WhatsApp ist verbunden.');
         howToUse(current.user);
         void flush();
       }
@@ -136,7 +138,7 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
       const direct = !key.fromMe && !key.participant && /@(s\.whatsapp\.net|lid)$/.test(key.remoteJid ?? '');
       if (direct && config.allowed.size && !warnedStranger) {
         warnedStranger = true;
-        log('Nachricht von einer nicht erlaubten Nummer ignoriert. Warst du das? Dann mit Q ins Menü und 2 wählen.');
+        log(`Nachricht von einer nicht erlaubten Nummer ignoriert. Warst du das? ${KEYS ? 'Dann mit Q ins Menü und 2 wählen.' : 'Dann ALLOWED_NUMBERS in .env prüfen.'}`);
       }
       return;
     }

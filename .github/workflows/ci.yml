@@ -90,9 +90,34 @@ jobs:
       - name: Paketsignaturen prüfen
         run: npm audit signatures
 
+  docker:
+    name: Docker-Image bauen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compose-Datei prüfen
+        run: docker compose config -q
+
+      - name: Image bauen
+        run: docker build -t wa-alltagshelfer .
+
+      - name: Module und Zeitzone im Image prüfen
+        run: |
+          docker run --rm --read-only wa-alltagshelfer node --input-type=module -e "
+            await import('./src/whatsapp.js');
+            await import('./src/product.js');
+            await import('./src/setup.js');
+            if (Intl.DateTimeFormat().resolvedOptions().timeZone !== 'Europe/Berlin') process.exit(1);
+          "
+
   discord:
     name: Discord benachrichtigen
-    needs: [test, security]
+    needs: [test, security, docker]
     # Also after a failure, but not for runs replaced by a newer push.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest

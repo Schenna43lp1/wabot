@@ -1,0 +1,33 @@
+services:
+  bot:
+    build: .
+    image: wa-alltagshelfer
+    container_name: wa-alltagshelfer
+    restart: unless-stopped
+    init: true
+    # Settings from .env (ALLOWED_NUMBERS and so on). Without the file only the self-chat works.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Reminders and the briefing go by this clock.
+      TZ: ${TZ:-Europe/Berlin}
+      # The folder below, whatever .env says.
+      DATA_DIR: /app/data
+    volumes:
+      # WhatsApp session, database and backups. Same folder as without Docker.
+      - ./data:/app/data
+    # Keeps the log readable and the disk free.
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+    # Read-only except for the data folder.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
