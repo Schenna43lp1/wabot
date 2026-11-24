@@ -62,6 +62,8 @@ export function createSpeech({ dataDir, model: name, log = () => {}, root = ROOT
   async function work(buffer) {
     // WhatsApp voice messages are Ogg Opus. Forwarded music or iPhone files may be something else.
     if (!isOgg(buffer)) throw new SpeechError('format');
+    // Decoding a long recording fills the memory before its length is known, so the header decides first.
+    if (oggSeconds(buffer) > MAX_SECONDS + 1) throw new SpeechError('long');
     let model;
     try {
       model = await ready();
@@ -103,6 +105,21 @@ export class SpeechError extends Error {
     super(`${kind}${cause ? `: ${cause.message}` : ''}`, { cause });
     this.kind = kind;
   }
+}
+
+/**
+ * Length of an Ogg Opus file from the granule position of its last page (always 48 kHz), or 0 if unknown.
+ */
+export function oggSeconds(buffer) {
+  const bytes = Buffer.from(buffer.buffer ?? buffer, buffer.byteOffset ?? 0, buffer.length);
+  for (let at = bytes.lastIndexOf('OggS'); at >= 0; at = at > 0 ? bytes.lastIndexOf('OggS', at - 1) : -1) {
+    // A page header: "OggS", version 0, flags, then the granule position.
+    if (at + 14 > bytes.length || bytes[at + 4] !== 0) continue;
+    const granule = bytes.readBigUInt64LE(at + 6);
+    // -1 marks a page on which no packet ends.
+    if (granule !== 0xffffffffffffffffn) return Number(granule) / 48_000;
+  }
+  return 0;
 }
 
 const isOgg = (buffer) => buffer?.length > 4 && buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53;

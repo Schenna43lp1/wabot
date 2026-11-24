@@ -11,6 +11,9 @@ import { supervise } from './supervise.js';
 const ROOT = join(import.meta.dirname, '..');
 const log = (text) => process.stdout.write(`[${new Date().toLocaleString('de-DE')}] ${text}\n`);
 
+// Session, database and backups only for the bot user, also on the host's bind mount.
+process.umask(0o077);
+
 let child;
 let stopping = false;
 for (const signal of ['SIGTERM', 'SIGINT']) {

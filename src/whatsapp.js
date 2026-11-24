@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import makeWASocket, {
-  BufferJSON, DisconnectReason, downloadMediaMessage, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState,
+  BufferJSON, DisconnectReason, downloadMediaMessage, isLidUser, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState,
 } from 'baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
@@ -13,6 +13,7 @@ import { cleanTranscript, MAX_SECONDS } from './speech.js';
 // Prefix of every bot message, so the self-chat cannot answer itself in a loop.
 const MARK = '🤖 ';
 const DAY_MS = 86_400_000;
+const MAX_VOICE_BYTES = 5_000_000;
 const TYPING_AFTER_MS = 600;
 // Older messages say when they were written: the price may have moved since.
 const DELAYED_MS = 30 * 60_000;
@@ -80,9 +81,11 @@ export async function startWhatsApp({
       markOnlineOnConnect: false,
       shouldSyncHistoryMessage: () => false,
       // WhatsApp asks for the original when a device could not decrypt it.
-      getMessage: async ({ id }) => {
-        const body = id && db.sent(id);
-        return body ? JSON.parse(body, BufferJSON.reviver) : undefined;
+      // Anyone can ask for any id, so only the chat that got the message gets it again.
+      getMessage: async ({ id, remoteJid }) => {
+        const row = id && db.sent(id);
+        if (!row?.chat || !(await sameChat(sock, row.chat, remoteJid))) return undefined;
+        return JSON.parse(row.body, BufferJSON.reviver);
       },
     });
     sock = current;
@@ -201,7 +204,7 @@ export async function startWhatsApp({
     const quiet = sender.self;
     if (!transcribe) return NO_SPEECH;
     // Two minutes of WhatsApp voice are about 300 KB. Anything far bigger is no voice message.
-    if (Number(voice.seconds) > MAX_SECONDS || Number(voice.fileLength) > 5_000_000) return quiet ? null : TOO_LONG;
+    if (Number(voice.seconds) > MAX_SECONDS || Number(voice.fileLength) > MAX_VOICE_BYTES) return quiet ? null : TOO_LONG;
     let audio;
     try {
       audio = await download(raw, socket);
@@ -209,6 +212,8 @@ export async function startWhatsApp({
       log(`Sprachnachricht nicht heruntergeladen: ${error.message}`);
       return quiet ? null : SPEECH_FAILED.download;
     }
+    // seconds and fileLength are what the sender's phone claims, the file itself counts.
+    if (audio?.length > MAX_VOICE_BYTES) return quiet ? null : TOO_LONG;
     // Only the very first voice message after the start waits for the model.
     if (!quiet && transcribe.isReady?.() === false) await answer(sender, LOADING);
     let heard;
@@ -281,7 +286,7 @@ export async function startWhatsApp({
   }
 
   function remember(sent) {
-    if (sent?.key.id) db.saveSent(sent.key.id, JSON.stringify(sent.message, BufferJSON.replacer));
+    if (sent?.key.id) db.saveSent(sent.key.id, JSON.stringify(sent.message, BufferJSON.replacer), sent.key.remoteJid);
   }
 
   async function flush() {
@@ -321,6 +326,20 @@ export async function startWhatsApp({
       sock?.end(undefined);
     },
   };
+}
+
+/** True when both are the same person, whether WhatsApp names them by number or by LID. */
+export async function sameChat(socket, a, b) {
+  if (!a || !b) return false;
+  const own = [socket.user?.id, socket.user?.lid].filter(Boolean).map((jid) => jidNormalizedUser(jid));
+  const person = async (jid) => {
+    const normalized = jidNormalizedUser(jid);
+    if (own.includes(normalized)) return 'self';
+    if (!isLidUser(normalized)) return normalized;
+    const phone = await Promise.resolve(socket.signalRepository?.lidMapping?.getPNForLID(normalized)).catch(() => null);
+    return phone ? jidNormalizedUser(phone) : normalized;
+  };
+  return (await person(a)) === (await person(b));
 }
 
 export function splitText(text, max = 3500) {

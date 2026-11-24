@@ -19,7 +19,8 @@ export function saveNumbers(root, input) {
   const line = `ALLOWED_NUMBERS=${numbers}`;
   const pattern = /^[ \t]*ALLOWED_NUMBERS[ \t]*=.*$/gm;
   const after = pattern.test(before) ? before.replace(pattern, line) : `${before.trimEnd()}\n${line}\n`;
-  writeFileSync(file, after);
+  // Only the owner may read the settings (no effect on Windows).
+  writeFileSync(file, after, { mode: 0o600 });
 }
 
 export function isLinked(dataDir) {
