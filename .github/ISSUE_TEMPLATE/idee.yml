@@ -1,0 +1,22 @@
+name: Idee vorschlagen
+description: Ein neuer Befehl oder eine Verbesserung.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: wofuer
+    attributes:
+      label: Wofür brauchst du es?
+      description: Die Situation im Alltag, nicht nur die Lösung.
+    validations:
+      required: true
+  - type: textarea
+    id: wie
+    attributes:
+      label: Wie könnte die Nachricht an den Bot aussehen?
+      placeholder: "`wasser 2l` → Trinkmenge für heute"
+  - type: checkboxes
+    id: daten
+    attributes:
+      label: Datenschutz
+      options:
+        - label: Die Idee kommt ohne neue externe Dienste aus, oder ich habe beschrieben, welche Daten dorthin gingen.

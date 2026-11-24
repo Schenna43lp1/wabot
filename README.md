@@ -336,18 +336,35 @@ Wiederherstellen:
 
 ```powershell
 npm test
+npm run check -- "<Produktlink>"
 ```
+
+Wie die Teile zusammenspielen und wie man einen Befehl hinzufügt, steht in [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md). Regeln für Änderungen: [CONTRIBUTING.md](CONTRIBUTING.md), Sicherheitslücken: [SECURITY.md](SECURITY.md).
 
 | Datei in `src` | Aufgabe |
 |---|---|
 | `cli.js`, `setup.js` | Startmenü und Einrichtung |
 | `container.js` | Start in Docker statt des Menüs |
+| `check.js` | Link ohne WhatsApp testen |
+| `config.js` | liest die `.env` |
 | `index.js` | Start und Zeitplan |
+| `exit-codes.js` | warum der Bot endete, für Menü und Docker |
+| `errors.js` | Fehler mit Text für den Nutzer |
 | `whatsapp.js` | Verbindung, Empfang und Versand |
 | `access.js` | wer den Bot benutzen darf |
 | `commands.js` | Chat-Befehle |
 | `help.js` | Hilfetext des Bots |
 | `input.js` | versteht die Eingaben |
+| `when.js` | Zeitangaben wie „morgen halb 9“ und Wiederholungen |
+| `reminders.js` | Erinnerungen |
+| `lists.js` | Einkaufsliste, To-dos, Notizen |
+| `calendar.js`, `ical.js` | Kalender-Anbindung und iCal-Leser |
+| `birthdays.js` | Geburtstage |
+| `briefing.js`, `weather.js` | Morgen-Briefing und Wetter |
+| `expenses.js` | Haushaltsbuch |
+| `calc.js`, `tools.js` | Rechner, Trinkgeld, Umrechnung |
+| `rates.js` | Wechselkurse der EZB |
+| `product.js` | Produktseite laden und auswerten |
 | `messages.js` | Antworttexte zu Produkten |
 | `tracker.js` | Prüfungen und Alarmregeln |
 | `extract.js` | Preiserkennung |
