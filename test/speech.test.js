@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { cleanTranscript, createSpeech, numberWord, speechInstalled, toMono16k } from '../src/speech.js';
@@ -45,7 +46,8 @@ test('without the optional packages there is no speech recognition', () => {
 
 // Downloads the model once (about 80 MB): SPEECH_TEST=1 npm test
 test('real voice message with Whisper', { skip: !(process.env.SPEECH_TEST && speechInstalled()) && 'SPEECH_TEST=1 and npm run sprache' }, async () => {
-  const dataDir = join(import.meta.dirname, '..', 'data', 'speech-test');
+  // Outside the project, so the real data folder stays clean and the model is downloaded only once.
+  const dataDir = join(tmpdir(), 'wapricetracker-speech-test');
   mkdirSync(dataDir, { recursive: true });
   const transcribe = createSpeech({ dataDir });
   const heard = cleanTranscript(await transcribe(readFileSync(join(import.meta.dirname, 'fixtures', 'erinnerung.ogg'))));
