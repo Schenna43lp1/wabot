@@ -12,6 +12,14 @@ function toNumber(raw) {
 function tokenize(input) {
   const text = input
     .toLowerCase()
+    // "12 mal 3", "100 geteilt durch 7", "2 hoch 10", "19 prozent von 250", "wurzel aus 16"
+    .replace(/(\d)\s*prozent\b/g, '$1%')
+    .replace(/\s+mal\s+/g, ' * ')
+    .replace(/\s+(?:geteilt\s+)?durch\s+/g, ' / ')
+    .replace(/\s+plus\s+/g, ' + ')
+    .replace(/\s+minus\s+/g, ' - ')
+    .replace(/\s+hoch\s+/g, ' ^ ')
+    .replace(/wurzel\s+aus\s+/g, 'wurzel ')
     .replace(/(\d)\s*%\s*von\s*/g, '$1%*')
     .replace(/wurzel|√/g, 'sqrt')
     .replace(/[×·]/g, '*')

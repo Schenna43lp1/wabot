@@ -1,7 +1,7 @@
 # Secrets and the WhatsApp session never go into the image.
 .env
 data/
-node_modules/
+**/node_modules/
 .git/
 .github/
 test/

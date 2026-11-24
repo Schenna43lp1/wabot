@@ -1,6 +1,25 @@
 # WhatsApp-Alltagshelfer
 
-Ein Bot für den Alltag, der per WhatsApp antwortet und lokal auf deinem PC läuft:
+Ein Bot für den Alltag, der per WhatsApp antwortet und lokal auf deinem PC läuft. Du schreibst ihm wie einem Menschen, auch per Sprachnachricht:
+
+```
+Du:   Kannst du mich morgen früh an den Müll erinnern?
+Bot:  ⏰ Ich erinnere dich morgen um 08:00 Uhr: den Müll
+
+Du:   Milch, Eier und Butter auf die Einkaufsliste
+Bot:  ➕ Milch, Eier, Butter
+      🛒 Einkaufsliste (3)  1. Milch  2. Eier  3. Butter
+
+Du:   was steht morgen an?
+Bot:  📅 Morgen, Mi 25.11.
+      10:00 Standup (Büro)
+      ⏰ 08:00 den Müll
+
+Du:   🎤 „Was sind 50 Euro in Franken?“
+Bot:  💱 50,00 € = 47,50 CHF
+```
+
+Was er kann:
 
 - **Erinnerungen:** `erinnere mich morgen 9 an Arzt`, auch wiederkehrend und mit `später` zum Verschieben.
 - **Einkaufsliste und To-dos:** `einkauf Milch, Brot`, `todo Steuer`, `erledigt 2`.
@@ -13,6 +32,10 @@ Ein Bot für den Alltag, der per WhatsApp antwortet und lokal auf deinem PC läu
 - **Preistracker:** Schick einen Produktlink. Der Bot prüft den Preis regelmäßig und schreibt dir, wenn er fällt, dein Zielpreis erreicht ist oder das Produkt wieder verfügbar ist.
 
 Beim Preistracker kann er Produkte pausieren und umbenennen, nachts still sein, regelmäßig eine Übersicht schicken, Preisverläufe als Diagramm schicken oder als Tabelle exportieren und mitrechnen, was du beim Kauf gespart hast. Alle Daten sichert er täglich.
+
+Alles bleibt auf deinem PC. Ins Internet gehen nur Produktlinks, der Ortsname fürs Wetter, die Abfrage der Wechselkurse und dein Kalender-Link (Details unter [Sicherheit und Risiken](#sicherheit-und-risiken)).
+
+**Inhalt:** [Start](#start) · [Docker](#start-mit-docker) · [Welche Nummer?](#welche-nummer) · [Einfach schreiben](#einfach-schreiben) · [Sprachnachrichten](#sprachnachrichten) · [Alltag](#befehle-für-den-alltag) · [Geld](#geld) · [Preistracker](#befehle-für-den-preistracker) · [Einstellungen](#einstellungen-env) · [Sicherheit](#sicherheit-und-risiken) · [Backup](#backup) · [Probleme](#probleme) · [Entwicklung](#entwicklung)
 
 ## Start
 
@@ -59,6 +82,8 @@ Für einen Server, NAS oder Raspberry Pi, der ständig läuft. Node.js braucht e
 - Nach einem Absturz startet Docker den Bot neu. Wird WhatsApp abgemeldet, erscheint im Log von selbst ein neuer QR-Code.
 - Bei Fehlern, die ein Neustart nicht behebt (Tippfehler in `.env`, zweite Instanz, gesperrte Nummer, erneute Abmeldung), startet der Bot nicht endlos neu. Er schreibt die Ursache ins Log und wartet auf `docker compose up -d` oder `restart`.
 - Unter Linux schreibt der Container als Benutzer 1000. Gehört `data` jemand anderem: `sudo chown -R 1000:1000 data`.
+- Sprachnachrichten: `SPEECH=an` in `.env`, dann `docker compose up -d --build`. Das Image wird dadurch etwa 700 MB größer (siehe [Sprachnachrichten](#sprachnachrichten)).
+- Ohne Menü stellst du die Nummern in `.env` ein (`ALLOWED_NUMBERS`), danach `docker compose up -d`.
 
 ## Welche Nummer?
 
@@ -69,6 +94,61 @@ So klingelt dein Handy bei jedem Alarm, und dein Hauptkonto ist keinem Sperrrisi
 **Eigene Nummer (zum Ausprobieren):** Wähle `2`, scanne mit deinem WhatsApp und schreib in den Chat „Nachricht an dich selbst“. Für eigene Nachrichten zeigt WhatsApp aber **keine Push-Benachrichtigung**, und jeder Link in diesem Chat wird als Produkt gespeichert.
 
 Gruppen, fremde Nummern und deine Chats mit anderen beantwortet der Bot nie.
+
+## Einfach schreiben
+
+Die Befehle in den Tabellen unten sind die kürzeste Form. Du musst sie aber nicht lernen: Der Bot versteht auch ganze Sätze, Groß- und Kleinschreibung, Satzzeichen, „bitte“, Schreibweisen ohne Umlaute (`loeschen`, `rueckgaengig`) und kleine Tippfehler.
+
+| Du schreibst | Der Bot macht daraus |
+|---|---|
+| `Kannst du mich morgen früh an den Müll erinnern?` | `erinnere mich morgen früh an den Müll` |
+| `weck mich morgen um 7` | Erinnerung „Aufstehen“ um 7 |
+| `zeig mir meine Erinnerungen` · `welche Erinnerungen habe ich?` | `erinnerungen` |
+| `was muss ich einkaufen?` · `was brauchen wir noch` | `einkauf` |
+| `Milch und Eier auf die Einkaufsliste` · `füge Brot zur Liste hinzu` | `einkauf Milch, Eier` |
+| `Milch erledigt` · `hab Milch gekauft` · `streiche Milch von der Liste` | `erledigt Milch` |
+| `was muss ich heute noch erledigen?` | `todo` |
+| `merk dir: Parkplatz Ebene 3` | `notiz Parkplatz Ebene 3` |
+| `wo ist mein WLAN-Passwort?` | zeigt passende Notizen |
+| `was steht heute an?` · `wie sieht mein Tag aus` | `briefing` |
+| `was steht morgen an?` · `was hab ich nächste Woche` | `termine morgen` · `termine nächste woche` |
+| `wie wird das Wetter morgen in Graz?` · `brauche ich einen Schirm` | `wetter Graz` · `wetter` |
+| `wann hat Anna Geburtstag?` | `geburtstag Anna` |
+| `Anna hat am 12.3. Geburtstag` | `geburtstag Anna 12.3.` |
+| `ich habe heute 20 Euro für Tanken ausgegeben` | `ausgabe 20 Euro Tanken` |
+| `wie viel habe ich diesen Monat ausgegeben?` | `ausgaben diesen Monat` |
+| `was ist 12 mal 3` · `12*3` · `wie viel sind 100 Dollar in Euro?` | rechnet oder rechnet um |
+| `was beobachtest du` · `meine Produkte` | Produktliste |
+| `Guten Morgen` · `Vielen Dank!` · `Tschüss` · `gute Nacht` | kurzer Gruß, `Gern! 👍`, `Bis bald! 👋`, `Gute Nacht! 🌙` |
+| `wie spät ist es?` · `welcher Tag ist heute` | Uhrzeit und Datum |
+| `ok` · `alles klar` · `👍` | keine Antwort, die braucht es nicht |
+
+Schlägt der Bot bei einem Tippfehler einen Befehl vor („Meintest du `notizen`?“), genügt `ja`.
+
+Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, weil du dort auch Notizen schreibst. Fragen wie „was muss ich einkaufen?“ und Rechnungen beantwortet er auch dort. „20 Euro für Pizza ausgegeben“ könnte aber ein Tagebucheintrag sein. Solche Sätze trägt er dort nicht als Ausgabe ein, `ausgabe 20 pizza` aber schon.
+
+## Sprachnachrichten
+
+Der Bot kann Sprachnachrichten verstehen, **ganz auf deinem PC**, mit dem Spracherkennungsmodell [Whisper](https://github.com/openai/whisper). Die Aufnahme geht an keinen fremden Dienst. Was er verstanden hat, schreibt er über seine Antwort:
+
+```
+Du:   🎤 (Sprachnachricht)
+Bot:  🎤 „Erinnere mich morgen um 9 an den Zahnarzt“
+      ⏰ Ich erinnere dich morgen um 09:00 Uhr: den Zahnarzt
+```
+
+Die Spracherkennung ist ein Zusatz, weil sie groß ist (etwa 500 MB Pakete und 80 MB Modell). Einschalten:
+
+1. Im Ordner des Bots `npm run sprache` ausführen, das dauert ein paar Minuten.
+2. Bot neu starten. Beim ersten Start lädt er das Modell einmal von Hugging Face herunter, danach liegt es in `data/models`.
+
+Im Log steht dann „Sprachmodell bereit“. In Docker: `SPEECH=an` in `.env` und `docker compose up -d --build`.
+
+- Höchstens 2 Minuten pro Nachricht. Eine Nachricht dauert auf einem normalen PC etwa 1 bis 3 Sekunden, die erste nach dem Start etwas länger.
+- Gesprochene Zahlen werden zu Ziffern („um neun“ → `um 9`, „am dritten Dezember“ → `am 3. Dezember`).
+- Im Chat „Nachricht an dich selbst“ bleibt eine Sprachnachricht, die kein Befehl ist, eine Sprachnotiz. Der Bot antwortet dann nicht.
+- Ohne den Zusatz antwortet der Bot auf Sprachnachrichten mit einem Hinweis.
+- Besser, aber langsamer und größer (etwa 250 MB): `SPEECH_MODEL=onnx-community/whisper-small` in `.env`. Abschalten: `SPEECH=aus`.
 
 ## Befehle für den Alltag
 
@@ -115,6 +195,7 @@ Erinnerungen kommen auch in der Ruhezeit. War der PC zur fälligen Zeit aus, kom
 | `einkauf leeren` | ganze Liste löschen |
 | `notiz WLAN Gäste: sonne123` | Notiz speichern, auch mehrzeilig |
 | `notizen` | alle Notizen |
+| `listen` | Einkaufsliste und To-dos zusammen |
 | `notiz 3` | Notiz 3 ganz lesen |
 | `notiz weg 3` | löschen |
 | `suche wlan` | in Notizen, Listen und Erinnerungen suchen |
@@ -138,6 +219,7 @@ Nur `https://`-Links werden angenommen, auch Weiterleitungen müssen verschlüss
 |---|---|
 | `kalender` | Anleitung, oder die Termine, wenn einer verbunden ist |
 | `termine` | die nächsten 7 Tage, zusammen mit deinen Erinnerungen |
+| `termine morgen` | nur ein Tag, auch `heute`, `übermorgen`, `wochenende`, `nächste woche` |
 | `kalender erinnern 15` | 15 Minuten vor jedem Termin Bescheid geben, auch in der Ruhezeit |
 | `kalender erinnern aus` | nicht mehr |
 | `kalender weg 1` | Kalender trennen |
@@ -151,6 +233,7 @@ Bis zu 5 Kalender pro Person. Der Bot lädt sie höchstens alle 15 Minuten, Änd
 | `geburtstag Anna 12.3.1990` | speichern; das Jahr ist freiwillig, auch `12. März` geht |
 | `geburtstag Anna 13.3.1990` | denselben Namen noch einmal: Datum ändern |
 | `geburtstage` | alle, nach dem nächsten Termin sortiert, mit Alter |
+| `geburtstag Anna` | nachsehen, wann Anna Geburtstag hat |
 | `geburtstag weg 2` | löschen |
 
 Der Bot meldet sich 3 Tage vorher und am Tag selbst um 9 Uhr, in der Ruhezeit erst danach. Geburtstage stehen auch in `termine` und im Briefing. Wer am 29. Februar geboren ist, feiert in anderen Jahren am 28.
@@ -196,7 +279,8 @@ Beim Eintragen sagt der Bot, wie viel diesen Monat schon ausgegeben ist, und war
 
 | Nachricht | Wirkung |
 |---|---|
-| `rechne 12,5*3+7` | rechnen; auch `x`, `:`, `^`, Klammern und `wurzel` |
+| `rechne 12,5*3+7` | rechnen; auch `x`, `:`, `^`, Klammern, `wurzel` und Wörter wie `12 mal 3`, `2 hoch 10` |
+| `12*3` | eine Rechnung allein geht auch ohne `rechne` |
 | `rechne 250 + 19%` | plus 19 Prozent (auch `- 20%`) |
 | `rechne 19% von 250` | Prozentwert |
 | `= 2^10` | kurz für `rechne` |
@@ -252,7 +336,7 @@ Zahlen schreibst du wie gewohnt: `12,5` oder `12.5`, `1.250` ist tausendzweihund
 
 Der Bot versteht auch `Lösche 3.`, `3 löschen`, `löschen nr. 3`, `liste bitte` oder einen Link statt der Nummer (`löschen https://…`). Bei Tippfehlern und Produktnamen schlägt er den passenden Befehl vor, führt ihn aber nicht von selbst aus.
 
-Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, damit er deine Notizen nicht kommentiert: keine Tippfehler-Vorschläge, keine Begrüßung, eine Zahl allein zählt nicht, und Wörter wie `pause`, `name` oder `weiter` gelten nur mit gültiger Nummer oder `alle`. `suche`, `später`, `erledigt`, `wetter` und `ort` antworten dort nur, wenn sie etwas finden. `wetter` mit Ort fragt dort nie beim Wetterdienst nach, `ort` nur bei höchstens drei Wörtern.
+Im Chat „Nachricht an dich selbst“ ist er zurückhaltender, damit er deine Notizen nicht kommentiert: keine Tippfehler-Vorschläge, keine Begrüßung, eine Zahl allein zählt nicht, und Wörter wie `pause`, `name` oder `weiter` gelten nur mit gültiger Nummer oder `alle`. `suche`, `später`, `erledigt`, `wetter` und `ort` antworten dort nur, wenn sie etwas finden. `wetter` mit Ort fragt dort nur bei einer klaren Frage („wie wird das Wetter in Graz?“) beim Wetterdienst nach, `ort` nur bei höchstens drei Wörtern ohne Ziffern.
 
 ## Wann kommt eine Nachricht?
 
@@ -280,6 +364,9 @@ Nach Änderungen den Bot neu starten.
 | `DEFAULT_CURRENCY` | EUR | falls der Shop keine Währung angibt |
 | `MAX_PRODUCTS_PER_USER` | 50 | Limit pro Person |
 | `DATA_DIR` | data | Speicherort |
+| `TZ` | die des PCs, in Docker `Europe/Berlin` | Zeitzone für Erinnerungen und Briefing, z. B. `Europe/Vienna` |
+| `SPEECH` | an, wenn installiert | `aus` schaltet die [Spracherkennung](#sprachnachrichten) ab; in Docker baut `an` sie ins Image |
+| `SPEECH_MODEL` | `onnx-community/whisper-base` | anderes Whisper-Modell, z. B. `onnx-community/whisper-small` |
 
 ## Shops
 
@@ -311,6 +398,7 @@ Grenzen:
 - `data/auth` (auch `data/auth-alt-…`) gewährt Zugriff auf das WhatsApp-Konto. **Niemals weitergeben oder hochladen.** Der Ordner `data` und `.env` stehen in `.gitignore`.
 - Links auf Adressen im Heimnetz werden abgelehnt.
 - Für das Wetter gehen der Ortsname, den du bei `ort` oder `wetter` angibst, und dessen Koordinaten an [Open-Meteo](https://open-meteo.com). Kalender lädt der Bot nur von der Adresse im Link (Google oder Microsoft). Die Wechselkurse holt er bei der EZB, ohne etwas über dich mitzuschicken. Erinnerungen, Listen, Notizen, Geburtstage und Ausgaben verlassen den PC nie.
+- Sprachnachrichten werden auf dem PC transkribiert und nicht gespeichert. Nur das Modell kommt einmal von [Hugging Face](https://huggingface.co); dabei geht nichts über dich mit.
 - Kalender-Links sind geheim und liegen in `data/tracker.db`. Auch deshalb gehört der Ordner `data` nicht ins Netz.
 - Alle Daten liegen lokal in `data/tracker.db`. Beim Export geht die Tabelle über WhatsApp an die Person, die sie angefordert hat.
 
@@ -334,6 +422,11 @@ Wiederherstellen:
 | Bot antwortet nicht | im Menü `2` die Nummer prüfen und neu starten |
 | QR-Code abgeschnitten oder verzerrt | Fenster maximieren oder mit Strg+Mausrad verkleinern |
 | Verbindung bricht dauernd mit Code 405 ab | Baileys ist veraltet: `npm install baileys@latest` |
+| Bot versteht einen Satz nicht | die kurze Form aus `hilfe` nehmen, z. B. `einkauf Milch`. Über ein Issue mit dem Satz freuen wir uns |
+| „Sprachnachrichten verstehe ich noch nicht“ | `npm run sprache` und Bot neu starten, siehe [Sprachnachrichten](#sprachnachrichten) |
+| Sprachnachricht falsch verstanden | deutlicher und näher am Mikrofon sprechen, oder `SPEECH_MODEL=onnx-community/whisper-small` |
+| „Sprachmodell nicht geladen“ im Log | keine Internetverbindung beim ersten Start; der Bot versucht es bei der nächsten Sprachnachricht wieder |
+| Docker: Bot wartet und startet nicht neu | die Meldung darüber im Log beheben, dann `docker compose up -d` |
 
 ## Entwicklung
 
@@ -357,7 +450,9 @@ Wie die Teile zusammenspielen und wie man einen Befehl hinzufügt, steht in [doc
 | `access.js` | wer den Bot benutzen darf |
 | `commands.js` | Chat-Befehle |
 | `help.js` | Hilfetext des Bots |
-| `input.js` | versteht die Eingaben |
+| `input.js` | versteht die Befehle, auch ohne Umlaute |
+| `phrases.js` | macht aus ganzen Sätzen Befehle |
+| `speech.js` | Sprachnachrichten mit Whisper, optional (`speech/`) |
 | `when.js` | Zeitangaben wie „morgen halb 9“ und Wiederholungen |
 | `reminders.js` | Erinnerungen |
 | `lists.js` | Einkaufsliste, To-dos, Notizen |

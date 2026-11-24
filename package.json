@@ -10,7 +10,8 @@
     "start": "node src/index.js",
     "menu": "node src/cli.js",
     "check": "node src/check.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "sprache": "npm ci --prefix speech --no-audit --no-fund"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",

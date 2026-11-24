@@ -1,52 +1,60 @@
 // Turns what people really type into commands. Never guesses at amounts.
 import { parsePrice } from './money.js';
 
+// Every spelling is folded first (see fold), so "loeschen", "LÖSCHEN" and "löschen" are one word.
 const WORDS = {
-  help: ['hilfe', 'help', '/help', 'befehle', 'menü', '?'],
-  hello: ['hallo', 'hi', 'hey', 'moin', 'servus', 'start', '/start'],
-  thanks: ['danke', 'thx', 'thanks'],
-  list: ['liste', 'list', '/list', 'produkte'],
-  undo: ['rückgängig', 'rueckgängig', 'rueckgaengig', 'undo'],
-  show: ['zeige', 'zeig', 'info'],
-  check: ['prüfen', 'prüfe', 'prüf', 'pruefen', 'pruefe', 'check'],
+  help: ['hilfe', 'hilf', 'help', '/help', 'befehle', 'befehl', 'kommandos', 'commands', 'anleitung', 'menü', '?'],
+  hello: ['hallo', 'hallöchen', 'hallihallo', 'hello', 'hi', 'hey', 'hej', 'huhu', 'moin', 'moinsen', 'servus', 'tach', 'grüezi', 'yo', 'start', '/start'],
+  thanks: ['danke', 'dankeschön', 'danki', 'dankee', 'merci', 'thx', 'thanks', 'thank', 'ty'],
+  list: ['liste', 'list', '/list', 'produkte', 'preise', 'preisliste', 'watchlist'],
+  undo: ['rückgängig', 'undo', 'wiederherstellen'],
+  show: ['zeige', 'zeig', 'info', 'details'],
+  check: ['prüfen', 'prüfe', 'prüf', 'check'],
   target: ['ziel', 'zielpreis'],
   history: ['verlauf'],
-  remove: ['löschen', 'lösche', 'lösch', 'loeschen', 'loesche', 'delete', 'entfernen', 'entferne'],
+  remove: ['löschen', 'lösche', 'lösch', 'delete', 'entfernen', 'entferne'],
   selector: ['selektor', 'selector'],
   pause: ['pause', 'pausiere', 'pausieren'],
   resume: ['weiter', 'fortsetzen'],
   rename: ['name', 'umbenennen'],
   threshold: ['schwelle'],
   quietHours: ['ruhe', 'ruhezeit'],
-  report: ['übersicht', 'uebersicht', 'zusammenfassung'],
+  report: ['übersicht', 'zusammenfassung'],
   export: ['export', 'exportieren', 'csv'],
   purchase: ['gekauft', 'bestellt'],
-  savings: ['ersparnis', 'gespart', 'bilanz'],
+  savings: ['ersparnis', 'gespart', 'erspartes', 'bilanz'],
   chart: ['diagramm', 'grafik', 'chart'],
   // Everyday helper
-  remind: ['erinnere', 'erinner', 'erinnern', 'erinnerung', 'remind'],
-  reminders: ['erinnerungen'],
-  calendar: ['kalender', 'calendar', 'termine', 'agenda'],
-  birthday: ['geburtstag', 'geburtstage', 'gebtag'],
-  calc: ['rechne', 'berechne', 'rechner', 'calc'],
+  remind: ['erinnere', 'erinner', 'erinnern', 'erinnerung', 'remind', 'reminder', 'erinere', 'erinre', 'erinnr', 'erinnre', 'erinnerr'],
+  reminders: ['erinnerungen', 'reminders', 'erinnerungsliste'],
+  calendar: ['kalender', 'calendar', 'termine', 'terminkalender', 'agenda'],
+  birthday: ['geburtstag', 'geburtstage', 'gebtag', 'bday', 'birthday'],
+  calc: ['rechne', 'rechnen', 'berechne', 'berechnen', 'ausrechnen', 'rechner', 'taschenrechner', 'calc'],
   tip: ['trinkgeld'],
-  convert: ['umrechnen', 'umrechnung', 'wechselkurs'],
+  convert: ['umrechnen', 'umrechnung', 'wechselkurs', 'wechselkurse', 'konvertiere'],
   rate: ['kurs'],
   expense: ['ausgabe', 'ausgegeben'],
-  expenses: ['ausgaben'],
+  expenses: ['ausgaben', 'haushaltsbuch'],
   budget: ['budget'],
-  snooze: ['später', 'spaeter', 'snooze'],
-  shopping: ['einkauf', 'einkaufen', 'einkaufsliste'],
-  todo: ['todo', 'todos', 'to-do', 'to-dos', 'aufgabe', 'aufgaben'],
-  done: ['erledigt', 'done', 'abhaken', 'abgehakt'],
-  note: ['notiz', 'notiere', 'notieren', 'merke', 'merk'],
-  notes: ['notizen'],
-  search: ['suche', 'such', 'suchen'],
-  weather: ['wetter'],
+  snooze: ['später', 'snooze'],
+  shopping: ['einkauf', 'einkaufen', 'einkaufsliste', 'einkaufszettel', 'einkäufe', 'shopping', 'shoppingliste'],
+  todo: ['todo', 'todos', 'to-do', 'to-dos', 'todoliste', 'to-do-liste', 'aufgabe', 'aufgaben', 'aufgabenliste', 'task', 'tasks'],
+  done: ['erledigt', 'done', 'abhaken', 'abgehakt', 'hak', 'hake', 'streiche', 'streichen', 'geschafft', 'fertig'],
+  note: ['notiz', 'notiere', 'notier', 'notieren', 'merke', 'merk', 'merken', 'note', 'memo'],
+  notes: ['notizen', 'notizn', 'notes', 'memos'],
+  lists: ['listen'],
+  search: ['suche', 'such', 'suchen', 'search'],
+  weather: ['wetter', 'weather', 'wetterbericht', 'wettervorhersage', 'vorhersage'],
   place: ['ort', 'wohnort', 'standort'],
-  briefing: ['briefing', 'tagesbriefing', 'morgenbriefing', 'tagesplan'],
+  briefing: ['briefing', 'tagesbriefing', 'morgenbriefing', 'tagesplan', 'tagesübersicht'],
 };
-const ACTIONS = new Map(Object.entries(WORDS).flatMap(([action, words]) => words.map((word) => [word, action])));
+
+/** Lower case without umlauts: "Rückgängig", "rueckgaengig" and "ruckgangig" are the same. */
+export function fold(word) {
+  return word.toLowerCase().replace(/ä|ae/g, 'a').replace(/ö|oe/g, 'o').replace(/ü|ue/g, 'u').replace(/ß/g, 'ss');
+}
+
+const ACTIONS = new Map(Object.entries(WORDS).flatMap(([action, list]) => list.map((word) => [fold(word), action])));
 const NEEDS_PRODUCT = new Set(['show', 'check', 'target', 'history', 'remove', 'selector', 'pause', 'resume', 'rename', 'threshold', 'purchase', 'chart']);
 const TAKES_ALL = new Set(['pause', 'resume']);
 const TAKES_SETTING = new Set(['quietHours', 'report']);
@@ -56,13 +64,14 @@ export const FREE_TEXT = new Set(['remind', 'reminders', 'snooze', 'shopping', '
 
 // Only these are suggested for typos.
 const SUGGESTED = ['hilfe', 'liste', 'rückgängig', 'zeige', 'prüfen', 'ziel', 'verlauf', 'löschen', 'selektor', 'pause', 'schwelle', 'übersicht', 'export', 'gekauft', 'ersparnis', 'diagramm',
-  'erinnerungen', 'einkauf', 'erledigt', 'notiz', 'notizen', 'wetter', 'briefing', 'kalender', 'termine', 'geburtstage', 'rechne', 'trinkgeld', 'ausgabe', 'ausgaben', 'budget'];
+  'erinnerungen', 'erinnere', 'einkauf', 'einkaufsliste', 'erledigt', 'notiz', 'notizen', 'suche', 'wetter', 'briefing', 'kalender', 'termine', 'geburtstag', 'geburtstage',
+  'rechne', 'trinkgeld', 'umrechnen', 'ausgabe', 'ausgaben', 'budget', 'aufgaben', 'listen', 'später'];
 
 const LINK = /https?:\/\/[^\s<>]+/gi;
 // "3", "#3", "3.", "3:", "nr. 3", "nummer 3"
 const PRODUCT_NUMBER = /^(?:(?:nr\.?|nummer)\s*|#)?(\d{1,9})(?:[.:)!?](?=\s|$)|(?=\s|$))\s*/i;
 
-export const actionOf = (word) => ACTIONS.get(word.toLowerCase());
+export const actionOf = (word) => ACTIONS.get(fold(word));
 
 /** Removes punctuation that belongs to the sentence, not to the link. */
 export function cleanLink(raw) {
@@ -175,7 +184,7 @@ export function suggest(input) {
   let best = null;
   let bestDistance = word.length < 7 ? 2 : 3;
   for (const command of SUGGESTED) {
-    const d = distance(word, command);
+    const d = distance(fold(word), fold(command));
     if (d < bestDistance) [best, bestDistance] = [command, d];
   }
   if (!best) return null;

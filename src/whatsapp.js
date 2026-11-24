@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import makeWASocket, {
-  BufferJSON, DisconnectReason, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState,
+  BufferJSON, DisconnectReason, downloadMediaMessage, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState,
 } from 'baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
@@ -8,6 +8,7 @@ import { authorize } from './access.js';
 import { EXIT } from './exit-codes.js';
 import { connectsCalendar } from './calendar.js';
 import { isQuiet } from './schedule.js';
+import { cleanTranscript, MAX_SECONDS } from './speech.js';
 
 // Prefix of every bot message, so the self-chat cannot answer itself in a loop.
 const MARK = '🤖 ';
@@ -18,6 +19,9 @@ const DELAYED_MS = 30 * 60_000;
 // Only a terminal window has the Q key, in Docker there is none.
 const KEYS = process.stdin.isTTY;
 const ONLY_TEXT = 'Ich kann nur Text lesen. Schick mir den Produktlink als Nachricht, am schnellsten über „Teilen“ im Shop.';
+const NO_SPEECH = '🎤 Sprachnachrichten verstehe ich noch nicht, bitte schreib mir. Einschalten lässt sich das am PC des Bots (README, „Sprachnachrichten“).';
+const NOT_HEARD = '🎤 Ich habe in der Sprachnachricht nichts verstanden. Sprich bitte etwas lauter oder schreib mir.';
+const TOO_LONG = `🎤 Die Sprachnachricht ist zu lang. Ich höre mir höchstens ${MAX_SECONDS / 60} Minuten an.`;
 
 const DISCONNECTED = {
   405: 'WhatsApp lehnt diese Bot-Version ab (siehe README, Probleme)',
@@ -27,7 +31,14 @@ const DISCONNECTED = {
   515: 'Kopplung wird abgeschlossen',
 };
 
-export async function startWhatsApp({ db, config, handle, log, onFatal, createSocket = makeWASocket, now = Date.now }) {
+/**
+ * transcribe(buffer) → text turns voice messages into commands, null without speech recognition.
+ * download(message, socket) → buffer can be replaced in tests.
+ */
+export async function startWhatsApp({
+  db, config, handle, log, onFatal, createSocket = makeWASocket, now = Date.now, transcribe = null,
+  download = (message, socket) => downloadMediaMessage(message, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: socket.updateMediaMessage }),
+}) {
   const logger = pino({ level: 'silent' });
   const { state, saveCreds } = await useMultiFileAuthState(join(config.dataDir, 'auth'));
   const queues = new Map();
@@ -116,7 +127,8 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
     });
   }
 
-  async function receive(socket, { key, message, messageTimestamp }) {
+  async function receive(socket, raw) {
+    const { key, message, messageTimestamp } = raw;
     const content = normalizeMessageContent(message);
     const text = content?.conversation || content?.extendedTextMessage?.text ||
       content?.imageMessage?.caption || content?.videoMessage?.caption;
@@ -142,8 +154,9 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
       }
       return;
     }
-    // In the self-chat photos and voice messages are notes.
-    if (!text && sender.self) return;
+    const voice = !text && content?.audioMessage ? content.audioMessage : null;
+    // In the self-chat photos and voice messages are notes, unless the bot can listen.
+    if (!text && sender.self && !(voice && transcribe)) return;
     if (!db.claimMessage(`${sender.user}:${key.id}`)) return;
 
     // One message after the other per user.
@@ -152,7 +165,9 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
       // Shops can take seconds, show that something is happening.
       const typing = setTimeout(() => setPresence(socket, 'composing', sender.chat), TYPING_AFTER_MS);
       try {
-        reply = text ? await handle(sender.user, text, { quiet: sender.self }) : ONLY_TEXT;
+        if (text) reply = await handle(sender.user, text, { quiet: sender.self });
+        else if (voice) reply = await listen(socket, raw, voice, sender);
+        else reply = ONLY_TEXT;
       } catch (error) {
         log(`Befehl fehlgeschlagen: ${error.stack}`);
         reply = 'Da ist bei mir etwas schiefgelaufen, versuch es bitte noch einmal. Details stehen im Bot-Fenster.';
@@ -172,6 +187,26 @@ export async function startWhatsApp({ db, config, handle, log, onFatal, createSo
     });
     queues.set(sender.user, job.catch(() => {}));
     await job;
+  }
+
+  /** A voice message: transcribed on this PC, then handled like the same words typed. */
+  async function listen(socket, raw, voice, sender) {
+    const quiet = sender.self;
+    if (!transcribe) return NO_SPEECH;
+    if (Number(voice.seconds) > MAX_SECONDS) return quiet ? null : TOO_LONG;
+    let heard;
+    try {
+      heard = cleanTranscript(await transcribe(await download(raw, socket)));
+    } catch (error) {
+      log(`Sprachnachricht nicht verstanden: ${error.message}`);
+      return quiet ? null : NOT_HEARD;
+    }
+    if (!heard) return quiet ? null : NOT_HEARD;
+    // In the self-chat a voice memo that is no command stays a memo.
+    const reply = await handle(sender.user, heard, { quiet });
+    if (reply == null) return null;
+    const said = `🎤 _„${heard.replace(/[_*~`]/g, '')}“_\n\n`;
+    return typeof reply === 'string' ? said + reply : { ...reply, text: said + reply.text };
   }
 
   async function answer({ user, chat }, reply) {

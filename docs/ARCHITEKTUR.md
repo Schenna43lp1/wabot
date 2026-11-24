@@ -33,12 +33,15 @@ flowchart LR
 
 ## Eine Nachricht von Anfang bis Ende
 
-1. **Empfang** (`whatsapp.js`): nur Text bis 4000 Zeichen, nicht älter als ein Tag, nicht von vor der Installation. Eigene Antworten beginnen mit `🤖 ` und werden übersprungen, damit der Chat „Nachricht an dich selbst“ nicht mit sich selbst redet.
+1. **Empfang** (`whatsapp.js`): nur Text bis 4000 Zeichen, nicht älter als ein Tag, nicht von vor der Installation. Eigene Antworten beginnen mit `🤖 ` und werden übersprungen, damit der Chat „Nachricht an dich selbst“ nicht mit sich selbst redet. Sprachnachrichten werden, wenn die Spracherkennung installiert ist, heruntergeladen, in `speech.js` lokal mit Whisper transkribiert und mit `cleanTranscript` aufbereitet (Zahlwörter, erfundene Untertitel). Danach laufen sie wie getippter Text weiter.
 2. **Zugriff** (`access.js`): Gruppen, fremde Nummern und Chats des Besitzers mit anderen ergeben `null`. Ergebnis ist `{ user, chat, self }`, wobei `user` immer die Telefonnummer ist, auch wenn WhatsApp eine LID schickt.
 3. **Einmal verarbeiten:** `db.claimMessage` verhindert doppelte Antworten, wenn WhatsApp eine Nachricht erneut zustellt. Pro Nutzer läuft eine Nachricht nach der anderen.
 4. **Befehl** (`commands.js` → `handle`):
-   - Vorab ohne Befehlswort: die Antwort auf „Wann soll ich dich erinnern?“, ein Kalender-Link allein, `= 12*3`, `100 usd in eur`.
-   - Sonst zerlegt `parseInput` (`input.js`) den Text in `{ action, ref, value }`. Aktionen in `FREE_TEXT` bekommen den Rest als freien Text.
+   - Zuerst die Antwort auf „Wann soll ich dich erinnern?“ und ein `ja` auf „Meintest du …?“.
+   - Dann `rephrase` (`phrases.js`): ganze Sätze werden zur kurzen Form („was muss ich einkaufen?“ → `einkauf`). Ein Ergebnis mit `sure` ist eine klare Frage an den Bot und wird auch im Chat mit sich selbst beantwortet; `silent` (bei „ok“, „👍“) heißt keine Antwort; `chatOnly` gilt nicht im Chat mit sich selbst.
+   - Vorab ohne Befehlswort: ein Kalender-Link allein, `= 12*3`, `100 usd in eur`.
+   - Sonst zerlegt `parseInput` (`input.js`) den Text in `{ action, ref, value }`. Befehlswörter werden vorher mit `fold` vereinheitlicht (klein, ohne Umlaute), so passt `rueckgaengig` zu `rückgängig`. Aktionen in `FREE_TEXT` bekommen den Rest als freien Text.
+   - Nichts erkannt: ein Tippfehler-Vorschlag, passende Notizen (`lists.related`) oder „nicht verstanden“.
    - Das passende Modul antwortet mit einem Text, einem Bild (`{ text, image }`) oder einer Datei (`{ text, file }`).
 5. **Antwort:** sofort senden. Klappt das nicht, landet ein Text in der Outbox und geht später raus.
 
@@ -105,6 +108,7 @@ Eine Datei `data/tracker.db` (SQLite über `node:sqlite`, WAL-Modus). Jede Tabel
 | Open-Meteo | `weather.js` | Ortsname und Koordinaten |
 | EZB | `rates.js` | nichts, eine öffentliche XML-Datei, 6 Stunden zwischengespeichert |
 | Google, Outlook | `calendar.js`, `ical.js` | der Kalender-Link des Nutzers |
+| Hugging Face | `speech.js` | nichts, nur einmal der Download des Whisper-Modells nach `data/models` |
 
 Alles Laden geht über `src/fetch-page.js`:
 
@@ -123,6 +127,8 @@ Alles Laden geht über `src/fetch-page.js`:
 | Baileys statt offizieller API | läuft mit einer privaten Nummer, kostenlos | inoffiziell, Sperrrisiko, Release Candidate |
 | Alles in einem Prozess | einfach zu starten und zu sichern | ein Absturz trifft alle Funktionen |
 | Deutsche Befehle mit freiem Satzbau | fühlt sich an wie eine Nachricht an einen Menschen | Parser muss Notizen von Befehlen trennen |
+| Sätze per Regeln (`phrases.js`), kein Sprachmodell | vorhersehbar, schnell, testbar, keine Daten nach außen | jede Satzform muss einzeln eingetragen werden |
+| Spracherkennung lokal mit Whisper, als Zusatz in `speech/` | Aufnahmen bleiben auf dem PC; wer sie nicht will, lädt keine 500 MB | erster Start lädt 80 MB, Docker-Image dann mit Debian statt Alpine |
 
 ## Einen Befehl hinzufügen
 
